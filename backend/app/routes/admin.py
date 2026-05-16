@@ -1,5 +1,9 @@
+from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
+
 from flask import Blueprint, jsonify, request
 
+from app import db
 from app.models import Game, Week
 from app.services.odds_service import refresh_odds
 from app.services.score_service import refresh_scores, score_game
@@ -77,3 +81,44 @@ def score_all_games_for_week(week_id: int):
     for game in games:
         score_game(game)
     return jsonify({"games_graded": len(games)})
+
+
+@admin_bp.post("/games/<int:game_id>/spread")
+@admin_required
+def set_game_spread(game_id: int):
+    game = Game.query.get(game_id)
+    if game is None:
+        return jsonify({"error": "game_not_found"}), 404
+
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify({"error": "malformed_body"}), 400
+
+    raw = body.get("spread_home")
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+        return jsonify({"error": "invalid_spread"}), 400
+    if isinstance(raw, float) and raw != raw:  # NaN
+        return jsonify({"error": "invalid_spread"}), 400
+
+    try:
+        spread = Decimal(str(raw)).quantize(Decimal("0.1"))
+    except (InvalidOperation, ValueError):
+        return jsonify({"error": "invalid_spread"}), 400
+
+    game.spread_home = spread
+    game.spread_source = "admin"
+    game.spread_updated_at = datetime.now(timezone.utc)
+    game.admin_override = True
+    db.session.commit()
+
+    return jsonify(
+        {
+            "game": {
+                "id": game.id,
+                "spread_home": float(game.spread_home),
+                "spread_source": game.spread_source,
+                "spread_updated_at": game.spread_updated_at.isoformat(),
+                "admin_override": game.admin_override,
+            }
+        }
+    )
