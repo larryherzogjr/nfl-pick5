@@ -1,0 +1,50 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: pick5
+      POSTGRES_PASSWORD: pick5
+      POSTGRES_DB: pick5
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  backend:
+    build: ./backend
+    command: gunicorn -w 4 -b 0.0.0.0:5000 wsgi:app
+    ports:
+      - "5000:5000"
+    environment:
+      - DATABASE_URL=postgresql://pick5:pick5@db:5432/pick5
+    env_file:
+      - .env
+    depends_on:
+      - db
+    volumes:
+      - ./backend:/app
+
+  scheduler:
+    build: ./backend
+    command: python -m app.scheduler.run
+    environment:
+      - DATABASE_URL=postgresql://pick5:pick5@db:5432/pick5
+    env_file:
+      - .env
+    depends_on:
+      - db
+    volumes:
+      - ./backend:/app
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_BASE_URL=http://localhost:5000
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+
+volumes:
+  pgdata:
