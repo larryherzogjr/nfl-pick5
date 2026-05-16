@@ -42,8 +42,10 @@ def create_app(config_class: type = Config) -> Flask:
         client_kwargs={"scope": "email public_profile"},
     )
 
+    from app.routes.admin import admin_bp
     from app.routes.auth import auth_bp
 
     app.register_blueprint(auth_bp)
+    app.register_blueprint(admin_bp)
 
     return app
