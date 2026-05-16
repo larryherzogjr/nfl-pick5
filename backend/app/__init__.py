@@ -48,4 +48,8 @@ def create_app(config_class: type = Config) -> Flask:
     app.register_blueprint(auth_bp)
     app.register_blueprint(admin_bp)
 
+    from app.commands import seed_weeks
+
+    app.cli.add_command(seed_weeks)
+
     return app
