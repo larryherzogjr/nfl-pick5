@@ -1,7 +1,8 @@
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 
-from app.models import Week
+from app.models import Game, Week
 from app.services.odds_service import refresh_odds
+from app.services.score_service import refresh_scores, score_game
 from app.utils.auth_helpers import admin_required
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/api/admin")
@@ -15,3 +16,64 @@ def refresh_odds_for_week(week_id: int):
         return jsonify({"error": "week_not_found"}), 404
     summary = refresh_odds()
     return jsonify(summary)
+
+
+@admin_bp.post("/scores/refresh")
+@admin_required
+def refresh_scores_endpoint():
+    summary = refresh_scores()
+    return jsonify(summary)
+
+
+@admin_bp.post("/games/<int:game_id>/score")
+@admin_required
+def set_game_score(game_id: int):
+    game = Game.query.get(game_id)
+    if game is None:
+        return jsonify({"error": "game_not_found"}), 404
+
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify({"error": "malformed_body"}), 400
+
+    score_home = body.get("score_home")
+    score_away = body.get("score_away")
+    if (
+        not isinstance(score_home, int)
+        or isinstance(score_home, bool)
+        or not isinstance(score_away, int)
+        or isinstance(score_away, bool)
+        or score_home < 0
+        or score_away < 0
+    ):
+        return jsonify({"error": "invalid_scores"}), 400
+
+    game.score_home = score_home
+    game.score_away = score_away
+    game.is_final = True
+    picks_graded = score_game(game)
+
+    return jsonify(
+        {
+            "game": {
+                "id": game.id,
+                "score_home": game.score_home,
+                "score_away": game.score_away,
+                "is_final": game.is_final,
+            },
+            "picks_graded": picks_graded,
+        }
+    )
+
+
+@admin_bp.post("/weeks/<int:week_id>/score-all")
+@admin_required
+def score_all_games_for_week(week_id: int):
+    week = Week.query.get(week_id)
+    if week is None:
+        return jsonify({"error": "week_not_found"}), 404
+
+    games = Game.query.filter_by(week_id=week_id, is_final=True).all()
+    for game in games:
+        score_game(game)
+    return jsonify({"games_graded": len(games)})
