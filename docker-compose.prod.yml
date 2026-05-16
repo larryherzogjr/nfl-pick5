@@ -1,0 +1,27 @@
+# Production overlay for docker-compose.yml.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Differences from dev:
+# - db and backend bind only to 127.0.0.1 (host Nginx proxies public traffic; nothing else should be exposed)
+# - frontend service is disabled (host Nginx serves the React production build directly)
+# - backend and scheduler bind mounts are removed (containers run the code baked into the image)
+#
+# The `!override` and `profiles` directives below require Docker Compose v2.24+.
+
+services:
+  db:
+    ports: !override
+      - "127.0.0.1:5432:5432"
+
+  backend:
+    ports: !override
+      - "127.0.0.1:5000:5000"
+    volumes: !override []
+
+  scheduler:
+    volumes: !override []
+
+  frontend:
+    # Opt-in profile prevents the service from starting under `compose up` in prod.
+    profiles:
+      - disabled
