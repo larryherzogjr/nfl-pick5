@@ -1,4 +1,5 @@
 import os
+from datetime import timedelta
 
 
 def _database_url() -> str:
@@ -7,6 +8,13 @@ def _database_url() -> str:
     if url.startswith("postgresql://"):
         url = "postgresql+psycopg://" + url[len("postgresql://") :]
     return url
+
+
+def _bool_env(name: str, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
 
 
 class Config:
@@ -21,3 +29,15 @@ class Config:
 
     ODDS_API_KEY = os.environ.get("ODDS_API_KEY")
     ODDS_PREFERRED_BOOK = os.environ.get("ODDS_PREFERRED_BOOK", "fanduel")
+
+    FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
+
+    SESSION_TYPE = "sqlalchemy"
+    SESSION_SQLALCHEMY_TABLE = "flask_sessions"
+    SESSION_PERMANENT = True
+    PERMANENT_SESSION_LIFETIME = timedelta(days=30)
+    SESSION_USE_SIGNER = True
+    SESSION_COOKIE_NAME = "pick5_session"
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = "Lax"
+    SESSION_COOKIE_SECURE = _bool_env("SESSION_COOKIE_SECURE", False)
