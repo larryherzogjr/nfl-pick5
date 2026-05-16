@@ -1,5 +1,6 @@
 from authlib.integrations.flask_client import OAuth
 from flask import Flask
+from flask_cors import CORS
 from flask_migrate import Migrate
 from flask_session import Session
 from flask_sqlalchemy import SQLAlchemy
@@ -10,6 +11,7 @@ db = SQLAlchemy()
 migrate = Migrate()
 sess = Session()
 oauth = OAuth()
+cors = CORS()
 
 
 def create_app(config_class: type = Config) -> Flask:
@@ -21,6 +23,13 @@ def create_app(config_class: type = Config) -> Flask:
 
     app.config["SESSION_SQLALCHEMY"] = db
     sess.init_app(app)
+
+    cors.init_app(
+        app,
+        resources={r"/auth/*": {"origins": [app.config["FRONTEND_URL"]]},
+                   r"/api/*": {"origins": [app.config["FRONTEND_URL"]]}},
+        supports_credentials=True,
+    )
 
     from app import models  # noqa: F401  (register models with SQLAlchemy metadata)
 
