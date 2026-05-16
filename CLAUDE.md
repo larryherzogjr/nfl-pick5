@@ -35,3 +35,6 @@ Code may reference these but they're not yet provisioned:
 - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
 - `META_APP_ID`, `META_APP_SECRET`
 - `ODDS_API_KEY`
+
+## Local dev setup in worktrees
+At the start of any session that runs `docker compose`, copy `.env.example` to `.env` if `.env` doesn't exist (it's gitignored and doesn't carry over between worktrees).
