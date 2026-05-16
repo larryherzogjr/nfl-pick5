@@ -3,6 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import apiClient from '../api/client';
 import TopNav from '../components/TopNav';
 import LeaderboardTable from '../components/LeaderboardTable';
+import LoadingState from '../components/LoadingState';
+import ErrorState from '../components/ErrorState';
 
 export default function Leaderboard() {
   const [scope, setScope] = useState('season');
@@ -11,10 +13,16 @@ export default function Leaderboard() {
   const {
     data: season,
     isLoading: seasonLoading,
-    isError: seasonError,
+    isError: seasonIsError,
+    error: seasonError,
+    refetch: refetchSeason,
   } = useQuery({
     queryKey: ['season', 'active'],
     queryFn: async () => (await apiClient.get('/api/seasons/active')).data,
+    retry: (failureCount, err) => {
+      if (err?.response?.status === 404) return false;
+      return failureCount < 2;
+    },
   });
 
   const { data: weeks, isLoading: weeksLoading } = useQuery({
@@ -41,7 +49,9 @@ export default function Leaderboard() {
   const {
     data: entries,
     isLoading: entriesLoading,
-    isError: entriesError,
+    isError: entriesIsError,
+    error: entriesError,
+    refetch: refetchEntries,
   } = useQuery({
     queryKey:
       scope === 'season'
@@ -91,7 +101,7 @@ export default function Leaderboard() {
               role="tab"
               aria-selected={scope === 'season'}
               onClick={() => handleScopeChange('season')}
-              className={`rounded-l-md px-4 py-1.5 text-sm font-medium transition-colors ${
+              className={`min-h-[44px] rounded-l-md px-4 py-2 text-sm font-medium transition-colors ${
                 scope === 'season'
                   ? 'bg-slate-900 text-white'
                   : 'bg-white text-slate-700 hover:bg-slate-50'
@@ -104,7 +114,7 @@ export default function Leaderboard() {
               role="tab"
               aria-selected={scope === 'week'}
               onClick={() => handleScopeChange('week')}
-              className={`rounded-r-md px-4 py-1.5 text-sm font-medium transition-colors ${
+              className={`min-h-[44px] rounded-r-md px-4 py-2 text-sm font-medium transition-colors ${
                 scope === 'week'
                   ? 'bg-slate-900 text-white'
                   : 'bg-white text-slate-700 hover:bg-slate-50'
@@ -121,7 +131,7 @@ export default function Leaderboard() {
                 value={selectedWeekId ?? ''}
                 onChange={(e) => setSelectedWeekId(Number(e.target.value))}
                 disabled={!weeks || weeks.length === 0}
-                className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-900 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                className="min-h-[44px] rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
               >
                 {(!weeks || weeks.length === 0) && (
                   <option value="">No weeks available</option>
@@ -136,25 +146,41 @@ export default function Leaderboard() {
           )}
         </div>
 
-        {seasonError && (
-          <div className="rounded-md bg-red-50 p-4 text-sm text-red-700">
-            Failed to load the active season.
-          </div>
+        {seasonIsError && seasonError?.response?.status === 404 && (
+          <ErrorState
+            variant="notFound"
+            title="No active season"
+            message="There is no active season right now. Check back when the next season starts."
+          />
         )}
 
-        {entriesError && (
-          <div className="rounded-md bg-red-50 p-4 text-sm text-red-700">
-            Failed to load the leaderboard.
-          </div>
+        {seasonIsError && seasonError?.response?.status !== 404 && (
+          <ErrorState
+            error={seasonError}
+            message="Failed to load the active season."
+            onRetry={refetchSeason}
+          />
         )}
 
-        {showSpinner && (
-          <div className="flex justify-center py-12">
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-300 border-t-slate-700" />
-          </div>
+        {entriesIsError && entriesError?.response?.status === 404 && (
+          <ErrorState
+            variant="notFound"
+            title="Leaderboard not found"
+            message="We couldn’t find leaderboard data for this scope yet."
+          />
         )}
 
-        {!showSpinner && !entriesError && (seasonQueryEnabled || weekQueryEnabled) && (
+        {entriesIsError && entriesError?.response?.status !== 404 && (
+          <ErrorState
+            error={entriesError}
+            message="Failed to load the leaderboard."
+            onRetry={refetchEntries}
+          />
+        )}
+
+        {showSpinner && <LoadingState label="Loading leaderboard…" />}
+
+        {!showSpinner && !entriesIsError && (seasonQueryEnabled || weekQueryEnabled) && (
           <LeaderboardTable entries={entries ?? []} />
         )}
       </main>

@@ -25,7 +25,7 @@ export default function PickBar({ count, onSubmit, isSubmitting, isDirty }) {
           type="button"
           onClick={handleClick}
           disabled={disabled}
-          className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+          className="min-h-[44px] rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
         >
           {isSubmitting ? 'Saving...' : 'Submit Picks'}
         </button>

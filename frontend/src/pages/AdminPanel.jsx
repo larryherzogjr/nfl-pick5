@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import apiClient from '../api/client';
 import TopNav from '../components/TopNav';
+import LoadingState from '../components/LoadingState';
+import ErrorState from '../components/ErrorState';
 
 function WeekDropdown({ weeks, value, onChange, disabled }) {
   return (
@@ -9,7 +11,7 @@ function WeekDropdown({ weeks, value, onChange, disabled }) {
       value={value ?? ''}
       onChange={(e) => onChange(Number(e.target.value))}
       disabled={disabled || !weeks || weeks.length === 0}
-      className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-900 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+      className="min-h-[44px] rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
     >
       {(!weeks || weeks.length === 0) && (
         <option value="">No weeks available</option>
@@ -116,7 +118,7 @@ function ScoreRow({ game, onSuccess }) {
         <div className="text-xs text-slate-500">{formatKickoff(game.kickoff)}</div>
       </div>
       <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-600">
-        <span>
+        <span className="break-words">
           Current:{' '}
           {game.score_home != null && game.score_away != null
             ? `${game.away_abbr} ${game.score_away} — ${game.home_abbr} ${game.score_home}`
@@ -140,7 +142,7 @@ function ScoreRow({ game, onSuccess }) {
             min="0"
             value={away}
             onChange={(e) => setAway(e.target.value)}
-            className="mt-0.5 w-24 rounded-md border border-slate-300 px-2 py-1 text-sm text-slate-900 focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+            className="mt-0.5 min-h-[44px] w-24 rounded-md border border-slate-300 px-2 py-2 text-sm text-slate-900 focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
           />
         </label>
         <label className="flex flex-col text-xs text-slate-600">
@@ -150,17 +152,21 @@ function ScoreRow({ game, onSuccess }) {
             min="0"
             value={home}
             onChange={(e) => setHome(e.target.value)}
-            className="mt-0.5 w-24 rounded-md border border-slate-300 px-2 py-1 text-sm text-slate-900 focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+            className="mt-0.5 min-h-[44px] w-24 rounded-md border border-slate-300 px-2 py-2 text-sm text-slate-900 focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
           />
         </label>
         <button
           type="submit"
           disabled={mutation.isPending}
-          className="rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+          className="min-h-[44px] rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {mutation.isPending ? 'Saving…' : 'Set score'}
         </button>
-        {err && <span className="text-xs text-red-700">Error: {err}</span>}
+        {err && (
+          <span className="basis-full text-xs text-red-700 sm:basis-auto">
+            Error: {err}
+          </span>
+        )}
       </form>
     </li>
   );
@@ -238,17 +244,21 @@ function SpreadRow({ game }) {
             step="0.5"
             value={value}
             onChange={(e) => setValue(e.target.value)}
-            className="mt-0.5 w-28 rounded-md border border-slate-300 px-2 py-1 text-sm text-slate-900 focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+            className="mt-0.5 min-h-[44px] w-28 rounded-md border border-slate-300 px-2 py-2 text-sm text-slate-900 focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
           />
         </label>
         <button
           type="submit"
           disabled={mutation.isPending}
-          className="rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+          className="min-h-[44px] rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {mutation.isPending ? 'Saving…' : 'Override'}
         </button>
-        {err && <span className="text-xs text-red-700">Error: {err}</span>}
+        {err && (
+          <span className="basis-full text-xs text-red-700 sm:basis-auto">
+            Error: {err}
+          </span>
+        )}
       </form>
     </li>
   );
@@ -384,7 +394,7 @@ export default function AdminPanel() {
               type="button"
               onClick={() => refreshOddsMutation.mutate()}
               disabled={!oddsWeekId || anyOddsPending}
-              className="rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+              className="min-h-[44px] rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {refreshOddsMutation.isPending
                 ? 'Refreshing…'
@@ -394,7 +404,7 @@ export default function AdminPanel() {
               type="button"
               onClick={() => scoreAllMutation.mutate()}
               disabled={!oddsWeekId || anyOddsPending}
-              className="rounded-md bg-slate-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-60"
+              className="min-h-[44px] rounded-md bg-slate-700 px-4 py-2 text-sm font-medium text-white hover:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {scoreAllMutation.isPending
                 ? 'Re-grading…'
@@ -406,7 +416,7 @@ export default function AdminPanel() {
               type="button"
               onClick={() => refreshAllScoresMutation.mutate()}
               disabled={anyOddsPending}
-              className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+              className="min-h-[44px] rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {refreshAllScoresMutation.isPending
                 ? 'Refreshing…'
@@ -431,18 +441,24 @@ export default function AdminPanel() {
             </label>
           </div>
           {scoreGames.isLoading && (
-            <div className="mt-4 flex justify-center py-8">
-              <div className="h-6 w-6 animate-spin rounded-full border-4 border-slate-300 border-t-slate-700" />
-            </div>
+            <LoadingState size="sm" className="mt-4" />
           )}
           {scoreGames.isError && (
-            <div className="mt-4 rounded-md bg-red-50 p-3 text-sm text-red-700">
-              Failed to load games.
+            <div className="mt-4">
+              <ErrorState
+                error={scoreGames.error}
+                message="Failed to load games."
+                onRetry={scoreGames.refetch}
+              />
             </div>
           )}
           {scoreGames.data && scoreGames.data.length === 0 && (
-            <div className="mt-4 text-sm text-slate-500">
-              No games for this week.
+            <div className="mt-4">
+              <ErrorState
+                variant="notFound"
+                title="No games"
+                message="No games for this week."
+              />
             </div>
           )}
           {scoreGames.data && scoreGames.data.length > 0 && (
@@ -474,18 +490,24 @@ export default function AdminPanel() {
             </label>
           </div>
           {spreadGames.isLoading && (
-            <div className="mt-4 flex justify-center py-8">
-              <div className="h-6 w-6 animate-spin rounded-full border-4 border-slate-300 border-t-slate-700" />
-            </div>
+            <LoadingState size="sm" className="mt-4" />
           )}
           {spreadGames.isError && (
-            <div className="mt-4 rounded-md bg-red-50 p-3 text-sm text-red-700">
-              Failed to load games.
+            <div className="mt-4">
+              <ErrorState
+                error={spreadGames.error}
+                message="Failed to load games."
+                onRetry={spreadGames.refetch}
+              />
             </div>
           )}
           {spreadGames.data && spreadGames.data.length === 0 && (
-            <div className="mt-4 text-sm text-slate-500">
-              No games for this week.
+            <div className="mt-4">
+              <ErrorState
+                variant="notFound"
+                title="No games"
+                message="No games for this week."
+              />
             </div>
           )}
           {spreadGames.data && spreadGames.data.length > 0 && (

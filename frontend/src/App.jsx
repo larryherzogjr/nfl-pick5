@@ -8,6 +8,7 @@ import WeekView from './pages/WeekView';
 import Leaderboard from './pages/Leaderboard';
 import Profile from './pages/Profile';
 import AdminPanel from './pages/AdminPanel';
+import Rules from './pages/Rules';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -24,6 +25,7 @@ export default function App() {
         <AuthProvider>
           <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/rules" element={<Rules />} />
             <Route
               path="/"
               element={

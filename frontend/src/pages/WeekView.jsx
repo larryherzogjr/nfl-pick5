@@ -5,6 +5,8 @@ import apiClient from '../api/client';
 import TopNav from '../components/TopNav';
 import GameCard from '../components/GameCard';
 import PickBar from '../components/PickBar';
+import LoadingState from '../components/LoadingState';
+import ErrorState from '../components/ErrorState';
 
 // Known limitation: POST /api/weeks/:id/picks does not support deletion.
 // Deselecting a previously-submitted pick and submitting will NOT remove it —
@@ -30,7 +32,9 @@ export default function WeekView() {
   const {
     data: games,
     isLoading: gamesLoading,
-    isError: gamesError,
+    isError: gamesIsError,
+    error: gamesError,
+    refetch: refetchGames,
   } = useQuery({
     queryKey: ['games', 'week', weekIdNum],
     queryFn: async () => {
@@ -38,15 +42,29 @@ export default function WeekView() {
       return data;
     },
     enabled: weekIdValid,
+    retry: (failureCount, err) => {
+      if (err?.response?.status === 404) return false;
+      return failureCount < 2;
+    },
   });
 
-  const { data: picks, isLoading: picksLoading } = useQuery({
+  const {
+    data: picks,
+    isLoading: picksLoading,
+    isError: picksIsError,
+    error: picksError,
+    refetch: refetchPicks,
+  } = useQuery({
     queryKey: picksQueryKey,
     queryFn: async () => {
       const { data } = await apiClient.get(`/api/weeks/${weekIdNum}/picks`);
       return data;
     },
     enabled: weekIdValid,
+    retry: (failureCount, err) => {
+      if (err?.response?.status === 404) return false;
+      return failureCount < 2;
+    },
   });
 
   const { data: season } = useQuery({
@@ -234,27 +252,48 @@ export default function WeekView() {
         )}
 
         {!weekIdValid && (
-          <div className="rounded-md bg-red-50 p-4 text-sm text-red-700">
-            Invalid week.
-          </div>
+          <ErrorState
+            variant="notFound"
+            title="Invalid week"
+            message="That week link doesn’t look right. Try picking a week from the leaderboard."
+          />
         )}
 
-        {weekIdValid && gamesError && (
-          <div className="rounded-md bg-red-50 p-4 text-sm text-red-700">
-            Failed to load games for this week.
-          </div>
+        {weekIdValid && gamesIsError && gamesError?.response?.status === 404 && (
+          <ErrorState
+            variant="notFound"
+            title="Week not found"
+            message="We couldn’t find this week. It may not be scheduled yet."
+          />
         )}
 
-        {weekIdValid && (gamesLoading || picksLoading) && (
-          <div className="flex justify-center py-12">
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-300 border-t-slate-700" />
-          </div>
+        {weekIdValid && gamesIsError && gamesError?.response?.status !== 404 && (
+          <ErrorState
+            error={gamesError}
+            message="Failed to load games for this week."
+            onRetry={refetchGames}
+          />
         )}
 
-        {weekIdValid && !gamesLoading && games && games.length === 0 && (
-          <div className="rounded-md bg-white p-6 text-center text-sm text-slate-600 shadow-sm">
-            No games scheduled for this week yet.
-          </div>
+        {weekIdValid && !gamesIsError && picksIsError && picksError?.response?.status !== 404 && (
+          <ErrorState
+            error={picksError}
+            message="Failed to load your picks."
+            onRetry={refetchPicks}
+            className="mt-3"
+          />
+        )}
+
+        {weekIdValid && !gamesIsError && (gamesLoading || picksLoading) && (
+          <LoadingState label="Loading games…" />
+        )}
+
+        {weekIdValid && !gamesLoading && !gamesIsError && games && games.length === 0 && (
+          <ErrorState
+            variant="notFound"
+            title="No games scheduled"
+            message="No games scheduled for this week yet. Check back once lines are posted."
+          />
         )}
 
         {weekIdValid && games && games.length > 0 && (

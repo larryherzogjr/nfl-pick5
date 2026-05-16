@@ -22,7 +22,7 @@ function pointsBadge(points) {
 
 function buttonClass(selected, locked) {
   const base =
-    'flex-1 rounded-md border px-3 py-3 text-sm font-medium transition select-none';
+    'flex-1 min-h-[44px] rounded-md border px-3 py-3 text-sm font-medium transition select-none';
   if (locked) {
     if (selected) {
       return `${base} cursor-not-allowed border-slate-300 bg-slate-200 text-slate-500`;

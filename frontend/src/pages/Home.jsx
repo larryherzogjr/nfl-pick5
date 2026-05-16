@@ -3,11 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import apiClient from '../api/client';
 import TopNav from '../components/TopNav';
+import LoadingState from '../components/LoadingState';
+import ErrorState from '../components/ErrorState';
 
 export default function Home() {
   const navigate = useNavigate();
 
-  const { data, isLoading, isError, error } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['weeks', 'current'],
     queryFn: async () => {
       const { data } = await apiClient.get('/api/weeks/current');
@@ -31,25 +33,20 @@ export default function Home() {
     <div className="min-h-screen bg-slate-50">
       <TopNav />
       <main className="mx-auto max-w-3xl px-4 py-12">
-        {isLoading && (
-          <div className="flex justify-center py-12">
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-300 border-t-slate-700" />
-          </div>
-        )}
+        {isLoading && <LoadingState label="Finding the current week…" />}
         {noActiveWeek && (
-          <div className="rounded-lg bg-white p-8 text-center shadow-sm">
-            <h1 className="text-xl font-semibold text-slate-900">
-              No active week
-            </h1>
-            <p className="mt-2 text-sm text-slate-600">
-              Check back during the season.
-            </p>
-          </div>
+          <ErrorState
+            variant="notFound"
+            title="No active week"
+            message="Check back during the season."
+          />
         )}
         {isError && !noActiveWeek && (
-          <div className="rounded-md bg-red-50 p-4 text-sm text-red-700">
-            Failed to load the current week.
-          </div>
+          <ErrorState
+            error={error}
+            message="Failed to load the current week."
+            onRetry={refetch}
+          />
         )}
       </main>
     </div>
