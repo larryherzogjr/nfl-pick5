@@ -30,6 +30,16 @@ Follow DESIGN.md §14 strictly. Do not skip ahead — auth before picks, picks b
 ## Production target
 Hetzner bare-metal Ubuntu 24.04 LTS. App runs as user `pick5` at `/srv/nfl-pick5`, fronted by host Nginx + Let's Encrypt. In production compose, non-public services (backend, db) MUST bind to `127.0.0.1:` not `0.0.0.0:`.
 
+## Production frontend build
+The frontend Dockerfile is multi-stage with a `dist` target that exports the built bundle to the host via BuildKit. No npm/node needs to be installed on the host. Local dev (`docker compose up`) is unchanged — `dev` is the default stage.
+
+```
+docker build --target dist --output type=local,dest=./frontend/dist \
+    --build-arg VITE_API_BASE_URL=https://pick5.yourdomain.com ./frontend
+```
+
+This produces `./frontend/dist/` for Nginx to serve.
+
 ## Deferred env vars
 Code may reference these but they're not yet provisioned:
 - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
