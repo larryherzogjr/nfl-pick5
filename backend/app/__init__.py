@@ -5,6 +5,8 @@ from flask_migrate import Migrate
 from flask_session import Session
 from flask_sqlalchemy import SQLAlchemy
 
+from werkzeug.middleware.proxy_fix import ProxyFix
+
 from app.config import Config
 
 db = SQLAlchemy()
@@ -16,6 +18,10 @@ cors = CORS()
 
 def create_app(config_class: type = Config) -> Flask:
     app = Flask(__name__)
+    # Trust X-Forwarded-* headers from the Nginx reverse proxy.
+    # Without this, url_for(_external=True) generates http:// URLs
+    # because Flask sees the incoming request as plain HTTP from 127.0.0.1.
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
     app.config.from_object(config_class)
 
     db.init_app(app)
