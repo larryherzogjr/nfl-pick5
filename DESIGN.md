@@ -570,17 +570,30 @@ The `scheduler` service runs a single process (no Gunicorn worker fanout), so ea
 
 ### Target Environment
 
-This application is designed to run on a Docker-capable host. For the developer's environment, this would be a Proxmox VM or LXC container on the existing home lab infrastructure.
+This application is designed to run on a Docker-capable host. For the developer's environment, this is currently a Hetzner bare-metal Ubuntu 24.04 LTS server. The same docker-compose setup runs cleanly on any Docker-capable Linux host (Proxmox VM, LXC container, generic VPS).
 
 ### Production Considerations
 
-- Serve Flask behind Gunicorn (`gunicorn -w 4 wsgi:app`)
-- Run the scheduler as its own service (single process)
-- Put Nginx in front as reverse proxy (TLS termination, static file serving for React build)
-- React production build: `npm run build` → serve `dist/` via Nginx
-- PostgreSQL backups: pg_dump on cron, integrate with existing backup architecture
-- OAuth redirect URIs must be updated to match the production domain
+- Serve Flask behind Gunicorn (`gunicorn -w 4 wsgi:app`).
+- Put Nginx in front as reverse proxy: TLS termination, static file serving for the React build, request forwarding for `/api/*` and `/auth/*` to the backend on 127.0.0.1:5000.
+- Flask **MUST** wrap `app.wsgi_app` with `werkzeug.middleware.proxy_fix.ProxyFix(app.wsgi_app, x_proto=1, x_host=1)` in the app factory. Without this, `url_for(_external=True)` generates `http://` URLs because Flask sees the proxied request as plain HTTP from 127.0.0.1, which breaks OAuth redirect URI matching with Google and Meta. Nginx already sends `X-Forwarded-Proto: https` — ProxyFix is what makes Flask trust it.
+- React production build: use the multi-stage frontend Dockerfile's `dist` target with BuildKit `--output type=local` to export the bundle to the host filesystem. No Node.js needs to be installed on the production server.
+- Bare-metal hosts (vs. NAT-protected VMs): Docker port bindings MUST use `127.0.0.1:` prefixes in production compose overlays, because Docker bypasses UFW iptables. Binding to `0.0.0.0:` would publicly expose the backend and database regardless of firewall rules.
+- PostgreSQL backups: `pg_dump` on cron with 14-day local retention; rsync to offsite storage optional but recommended.
+- OAuth redirect URIs must be updated in Google Cloud Console and Meta Developer Console to match the production domain.
+- Two-account model: a runtime user (`pick5`) owns the app directory and runs Docker; an admin user (`lherzog`) is the only SSH-reachable account. The runtime user has no SSH access (`sshd_config` AllowUsers restricts to the admin user). All operational commands run via `sudo -iu pick5` from an admin session.
 
+### Scheduling and Time-Range Caveats
+
+- `seed-weeks <year>` computes Week 1 as the Thursday after Labor Day through the following Monday. This is correct in nearly all years, but the NFL occasionally schedules a Wednesday opener (most recently 2026) or an international game on Saturday. After seeding, spot-check Week 1's date range against the published NFL schedule and adjust with a manual `UPDATE` if any game's kickoff falls outside the seeded `start_date`/`end_date`. Games outside the range will silently skip during odds refresh with `skipped_no_week`.
+- The season created by `seed-weeks` defaults to `is_active = false` (the partial unique index only allows one active season, so auto-activating would risk overwriting in future-year seedings). Mark the season active explicitly: `UPDATE seasons SET is_active = true WHERE year = <year>;`. Without this, the AdminPanel weeks dropdown shows "No weeks available" and `/api/seasons/active` returns 404.
+
+### Filesystem Permissions for Reverse-Proxied Static Files
+
+When Nginx runs on the host (not in a container) and serves a React bundle out of a directory owned by a different user, the entire path from `/` down to the bundle must be traversable by Nginx's user (`www-data` on Ubuntu):
+
+- `/srv/nfl-pick5` should be mode **755** (not 750). The runtime user owns it, but `www-data` needs `+x` to walk into it.
+- The dist output directory created by BuildKit's `--output type=local` is mode **700** by default. After every frontend build, `chmod -R go+rX /srv/nfl-pick5/frontend/dist` to restore group/other read on files and traverse on directories.
 ---
 
 ## 14. Build Order for Claude Code
