@@ -159,9 +159,55 @@ function DisplayNameEditor({ user, onDone }) {
   );
 }
 
+function providerDisplayName(provider) {
+  if (provider === 'google') return 'Google';
+  if (provider === 'meta') return 'Meta';
+  return provider ?? '';
+}
+
+function ResetToOauthLink({ user }) {
+  const queryClient = useQueryClient();
+  const mutation = useMutation({
+    mutationFn: async () => {
+      const { data } = await apiClient.post('/auth/me/reset-to-oauth');
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
+    },
+    onError: (err) => {
+      // eslint-disable-next-line no-console
+      console.error('Reset-to-OAuth failed', err);
+    },
+  });
+
+  const onClick = () => {
+    if (mutation.isPending) return;
+    const ok = window.confirm(
+      `Reset your name to '${user.oauth_display_name}' and your avatar to your ${providerDisplayName(user.oauth_provider)} profile picture?`,
+    );
+    if (!ok) return;
+    mutation.mutate();
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={mutation.isPending}
+      className="text-xs font-medium text-slate-500 hover:text-slate-900 hover:underline focus:outline-none focus:ring-2 focus:ring-slate-300 disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      {mutation.isPending ? 'Resetting…' : 'Reset to OAuth info'}
+    </button>
+  );
+}
+
 function IdentityCard({ user }) {
   const memberSince = formatMemberSince(user.created_at);
   const [isEditing, setIsEditing] = useState(false);
+  const canReset =
+    user.display_name !== user.oauth_display_name ||
+    user.avatar_url !== user.oauth_avatar_url;
   return (
     <section className="rounded-lg bg-white p-6 shadow-sm ring-1 ring-slate-200">
       <div className="flex items-start gap-4">
@@ -192,9 +238,14 @@ function IdentityCard({ user }) {
           <ProviderPill provider={user.oauth_provider} />
         </div>
       </div>
-      {memberSince && (
-        <p className="mt-4 text-xs text-slate-500">Member since {memberSince}</p>
-      )}
+      <div className="mt-4 flex items-center justify-between gap-3">
+        {memberSince ? (
+          <p className="text-xs text-slate-500">Member since {memberSince}</p>
+        ) : (
+          <span />
+        )}
+        {canReset && <ResetToOauthLink user={user} />}
+      </div>
     </section>
   );
 }

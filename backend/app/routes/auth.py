@@ -19,6 +19,8 @@ def _serialize_user(user: User) -> dict:
         "is_admin": user.is_admin,
         "oauth_provider": user.oauth_provider,
         "created_at": user.created_at.isoformat() if user.created_at else None,
+        "oauth_display_name": user.oauth_display_name,
+        "oauth_avatar_url": user.oauth_avatar_url,
     }
 
 
@@ -51,7 +53,9 @@ def callback_google():
         user = User(
             email=email,
             display_name=display_name,
+            oauth_display_name=display_name,
             avatar_url=avatar_url,
+            oauth_avatar_url=avatar_url,
             oauth_provider="google",
             oauth_subject=sub,
             last_login=now,
@@ -59,7 +63,8 @@ def callback_google():
         db.session.add(user)
     else:
         user.email = email
-        user.avatar_url = avatar_url
+        user.oauth_display_name = display_name
+        user.oauth_avatar_url = avatar_url
         user.last_login = now
     db.session.commit()
 
@@ -100,7 +105,9 @@ def callback_meta():
         user = User(
             email=email,
             display_name=display_name,
+            oauth_display_name=display_name,
             avatar_url=avatar_url,
+            oauth_avatar_url=avatar_url,
             oauth_provider="meta",
             oauth_subject=sub,
             last_login=now,
@@ -108,7 +115,8 @@ def callback_meta():
         db.session.add(user)
     else:
         user.email = email
-        user.avatar_url = avatar_url
+        user.oauth_display_name = display_name
+        user.oauth_avatar_url = avatar_url
         user.last_login = now
     db.session.commit()
 
@@ -152,6 +160,16 @@ def update_me():
 
     user = g.current_user
     user.display_name = trimmed
+    db.session.commit()
+    return jsonify(_serialize_user(user))
+
+
+@auth_bp.post("/me/reset-to-oauth")
+@login_required
+def reset_to_oauth():
+    user = g.current_user
+    user.display_name = user.oauth_display_name
+    user.avatar_url = user.oauth_avatar_url
     db.session.commit()
     return jsonify(_serialize_user(user))
 

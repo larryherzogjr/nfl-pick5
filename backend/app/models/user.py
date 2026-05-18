@@ -16,6 +16,8 @@ class User(db.Model):
     email = db.Column(db.String(255), unique=True, nullable=False)
     display_name = db.Column(db.String(100), nullable=False)
     avatar_url = db.Column(db.Text)
+    oauth_display_name = db.Column(db.String(100), nullable=False)
+    oauth_avatar_url = db.Column(db.Text)
     oauth_provider = db.Column(db.String(20), nullable=False)
     oauth_subject = db.Column(db.String(255), nullable=False)
     is_admin = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
