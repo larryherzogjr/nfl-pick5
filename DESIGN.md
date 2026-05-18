@@ -575,11 +575,13 @@ This application is designed to run on a Docker-capable host. For the developer'
 ### Production Considerations
 
 - Serve Flask behind Gunicorn (`gunicorn -w 4 wsgi:app`).
-- Put Nginx in front as reverse proxy: TLS termination, static file serving for the React build, request forwarding for `/api/*` and `/auth/*` to the backend on 127.0.0.1:5000.
+- Put Nginx in front as reverse proxy: TLS termination, static file serving for the React build, request forwarding for `/api/*`, `/auth/*`, and `/avatars/*` to the backend on 127.0.0.1:5000.
 - Flask **MUST** wrap `app.wsgi_app` with `werkzeug.middleware.proxy_fix.ProxyFix(app.wsgi_app, x_proto=1, x_host=1)` in the app factory. Without this, `url_for(_external=True)` generates `http://` URLs because Flask sees the proxied request as plain HTTP from 127.0.0.1, which breaks OAuth redirect URI matching with Google and Meta. Nginx already sends `X-Forwarded-Proto: https` — ProxyFix is what makes Flask trust it.
 - React production build: use the multi-stage frontend Dockerfile's `dist` target with BuildKit `--output type=local` to export the bundle to the host filesystem. No Node.js needs to be installed on the production server.
 - Bare-metal hosts (vs. NAT-protected VMs): Docker port bindings MUST use `127.0.0.1:` prefixes in production compose overlays, because Docker bypasses UFW iptables. Binding to `0.0.0.0:` would publicly expose the backend and database regardless of firewall rules.
-- PostgreSQL backups: `pg_dump` on cron with 14-day local retention; rsync to offsite storage optional but recommended.
+- The Nginx `location` for `/avatars/` MUST use the `^~` modifier (`location ^~ /avatars/ { proxy_pass http://127.0.0.1:5000; ... }`). Without it, the generic regex `location` for static asset extensions (`.jpg`, `.png`, etc.) matches first and tries to serve avatars from the React dist directory, returning broken images.
+- Persistent user data lives at `/srv/nfl-pick5/data/` on the host, bind-mounted into the backend container at `/app/data/`. Currently `data/avatars/` is the only directory used; create it explicitly as the `pick5` user before the first `docker compose up` so Docker doesn't auto-create it as root.
+- Backups must cover both PostgreSQL (via `pg_dump`) and the avatar files (via `tar` of `/srv/nfl-pick5/data/avatars`). 14-day local retention; rsync to offsite storage optional but recommended.
 - OAuth redirect URIs must be updated in Google Cloud Console and Meta Developer Console to match the production domain.
 - Two-account model: a runtime user (`pick5`) owns the app directory and runs Docker; an admin user (`lherzog`) is the only SSH-reachable account. The runtime user has no SSH access (`sshd_config` AllowUsers restricts to the admin user). All operational commands run via `sudo -iu pick5` from an admin session.
 
