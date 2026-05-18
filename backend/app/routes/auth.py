@@ -59,7 +59,6 @@ def callback_google():
         db.session.add(user)
     else:
         user.email = email
-        user.display_name = display_name
         user.avatar_url = avatar_url
         user.last_login = now
     db.session.commit()
@@ -109,7 +108,6 @@ def callback_meta():
         db.session.add(user)
     else:
         user.email = email
-        user.display_name = display_name
         user.avatar_url = avatar_url
         user.last_login = now
     db.session.commit()
