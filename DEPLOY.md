@@ -5,6 +5,8 @@ This runbook takes the feature-complete codebase and walks it onto the Hetzner b
 - The Ubuntu 24.04 server is provisioned and hardened (lherzog + pick5 users, SSH key-only, UFW, Docker, Nginx, Certbot installed).
 - The codebase is in a GitHub repo (`larryherzogjr/nfl-pick5`) on the `main` branch.
 - You're working from your MacBook with SSH access as `lherzog`.
+- The application directory `/srv/nfl-pick5` is owned `pick5:pick5` with mode **755** (not 750). Host nginx runs as `www-data` and must be able to traverse into this directory to serve the React bundle. If you provisioned it 750, fix with `sudo chmod 755 /srv/nfl-pick5` before continuing.
+- The Flask app factory wraps `app.wsgi_app` with `werkzeug.middleware.proxy_fix.ProxyFix(app.wsgi_app, x_proto=1, x_host=1)`. Without this, `url_for(_external=True)` generates `http://` URLs (because Flask sees the proxied request from 127.0.0.1 as plain HTTP), which breaks Google/Meta OAuth redirect-URI matching. This lives in `backend/app/__init__.py` in the current codebase.
 
 Work through this top to bottom. Each phase has a checklist; tick items as you go. Code blocks in `dev:` boxes run on your MacBook, `srv-lherzog:` runs on the server as `lherzog`, `srv-pick5:` runs as `pick5` (via `sudo -iu pick5`).
 
@@ -155,9 +157,21 @@ srv-pick5: docker build --target dist --output type=local,dest=./frontend/dist \
 
 This produces `/srv/nfl-pick5/frontend/dist/` with the compiled React app. Nginx will serve it. No Node.js needs to be installed on the host — all build tooling stays inside Docker.
 
+**Important**: BuildKit's `--output type=local` creates the destination directory with mode **700** (owner-only). The files inside have sensible modes (644 for files, 755 for subdirectories), but the parent dist directory itself blocks nginx traversal. Open it up immediately after every build:
+
+```
+srv-pick5: chmod -R go+rX /srv/nfl-pick5/frontend/dist
+```
+
+The `go+rX` adds group+other read on files and traverse on directories (capital X only adds execute on dirs and already-executable files — won't make plain files executable).
+
 You'll re-run this command on every deploy where frontend code changed (see Phase 6.2).
 
 ### 2.4 Nginx site configuration
+
+This is a **two-pass** setup. A single config with `listen 443 ssl` and commented-out `ssl_certificate` directives won't pass `nginx -t` (the directive requires the cert file to exist), and `certbot --nginx` can't run if nginx is broken. So we start with HTTP-only, obtain the cert with `certbot certonly --webroot` (which doesn't touch nginx), then swap in the full HTTPS config.
+
+#### 2.4a HTTP-only initial config
 
 As lherzog:
 
@@ -165,16 +179,71 @@ As lherzog:
 srv-lherzog: sudo nano /etc/nginx/sites-available/pick5
 ```
 
-Paste this template (replace `pick5.yourdomain.com` throughout):
+Paste:
 
 ```nginx
-# HTTP → HTTPS redirect (Certbot will fill this in too, but having it explicit is clearer)
 server {
     listen 80;
     listen [::]:80;
     server_name pick5.yourdomain.com;
 
     # Let's Encrypt ACME challenge
+    location /.well-known/acme-challenge/ {
+        root /var/www/html;
+    }
+
+    # Placeholder until cert is obtained
+    location / {
+        return 200 "Setup in progress.\n";
+        add_header Content-Type text/plain;
+    }
+}
+```
+
+Enable, validate, reload:
+
+```
+srv-lherzog: sudo ln -s /etc/nginx/sites-available/pick5 /etc/nginx/sites-enabled/
+srv-lherzog: sudo rm /etc/nginx/sites-enabled/default
+srv-lherzog: sudo nginx -t
+srv-lherzog: sudo systemctl reload nginx
+```
+
+Confirm reachability: `curl http://pick5.yourdomain.com` from anywhere should return `Setup in progress.`
+
+#### 2.4b Obtain the cert via certbot certonly
+
+DNS must be resolving correctly first (Phase 1.1). Then:
+
+```
+srv-lherzog: sudo certbot certonly --webroot -w /var/www/html -d pick5.yourdomain.com
+```
+
+This uses the ACME HTTP-01 challenge against the webroot path we just exposed. Certbot writes cert files to `/etc/letsencrypt/live/pick5.yourdomain.com/` and **does not modify your nginx config**. Auto-renewal is set up via systemd timer (`systemctl list-timers | grep certbot`).
+
+Verify:
+
+```
+srv-lherzog: sudo ls /etc/letsencrypt/live/pick5.yourdomain.com/
+# Should list: cert.pem  chain.pem  fullchain.pem  privkey.pem
+srv-lherzog: sudo certbot renew --dry-run
+# Should report success
+```
+
+#### 2.4c Full production config
+
+```
+srv-lherzog: sudo nano /etc/nginx/sites-available/pick5
+```
+
+Replace contents with:
+
+```nginx
+server {
+    listen 80;
+    listen [::]:80;
+    server_name pick5.yourdomain.com;
+
     location /.well-known/acme-challenge/ {
         root /var/www/html;
     }
@@ -189,9 +258,8 @@ server {
     listen [::]:443 ssl http2;
     server_name pick5.yourdomain.com;
 
-    # TLS certs (Certbot will fill these in)
-    # ssl_certificate /etc/letsencrypt/live/pick5.yourdomain.com/fullchain.pem;
-    # ssl_certificate_key /etc/letsencrypt/live/pick5.yourdomain.com/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/pick5.yourdomain.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/pick5.yourdomain.com/privkey.pem;
 
     # Security headers
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
@@ -222,6 +290,19 @@ server {
         proxy_set_header X-Forwarded-Proto https;
     }
 
+    # User-uploaded avatar files served by Flask out of /srv/nfl-pick5/data/avatars.
+    # The ^~ modifier is REQUIRED — without it, the regex location block below
+    # for static asset extensions (.jpg, .png, etc.) wins and tries to serve
+    # avatars out of the React dist directory, returning 404 / broken images.
+    location ^~ /avatars/ {
+        proxy_pass http://127.0.0.1:5000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+
     # Frontend static files + SPA fallback
     root /srv/nfl-pick5/frontend/dist;
     index index.html;
@@ -239,43 +320,31 @@ server {
 }
 ```
 
-Enable and validate:
+Validate and reload:
 
 ```
-srv-lherzog: sudo ln -s /etc/nginx/sites-available/pick5 /etc/nginx/sites-enabled/
-srv-lherzog: sudo rm /etc/nginx/sites-enabled/default
 srv-lherzog: sudo nginx -t
 srv-lherzog: sudo systemctl reload nginx
-```
-
-### 2.5 TLS certificate via Certbot
-
-DNS must be resolving correctly first (Phase 1.1).
-
-```
-srv-lherzog: sudo certbot --nginx -d pick5.yourdomain.com
-```
-
-Certbot will:
-1. Verify domain ownership via HTTP-01 challenge
-2. Get a Let's Encrypt cert
-3. Uncomment the `ssl_certificate` lines in your nginx config
-4. Set up auto-renewal via systemd timer
-
-Verify:
-
-```
 srv-lherzog: curl -I https://pick5.yourdomain.com
-# Should return HTTP/2 200 (the default React 404 page, but TLS works)
-srv-lherzog: sudo certbot renew --dry-run
-# Should report success
 ```
+
+The curl should return `HTTP/2 200` once the dist directory has been built (Phase 2.3). Before that it'll return `HTTP/2 403` because nginx can find the dist directory but there's no `index.html` yet — that's expected and resolves once Phase 2.3 has produced the bundle.
+
+The `X-Forwarded-Proto: https` header we send from nginx is consumed by the Flask app's ProxyFix middleware (see assumptions at the top) so that `url_for(_external=True)` generates `https://` URLs. This is what makes OAuth redirect URIs match.
 
 ---
 
 ## Phase 3: First deployment
 
 ### 3.1 Build and bring up the stack
+
+Before the first `docker compose up`, create the persistent data directories that the prod compose bind-mounts into the backend container. If you skip this, Docker will auto-create the host paths as root-owned, which makes them awkward to back up and inspect from the `pick5` user account.
+
+```
+srv-pick5: mkdir -p /srv/nfl-pick5/data/avatars
+```
+
+Currently `data/avatars` is the only persistent data directory. If more get added (uploaded receipts, exports, etc.), create them here too.
 
 As pick5:
 
@@ -304,6 +373,35 @@ srv-pick5: docker compose -f docker-compose.yml -f docker-compose.prod.yml \
 ```
 
 Expected: `Seeded 18 new weeks for season 2026-2027 (0 already existed)`.
+
+`seed-weeks` creates the Season row with `is_active = false` by default (the partial unique index on `is_active = true` only allows one row, so auto-activating would risk overwriting an existing active season in future-year seedings). You need to flip it on explicitly:
+
+```
+srv-pick5: docker compose -f docker-compose.yml -f docker-compose.prod.yml exec db psql -U pick5
+```
+
+```sql
+UPDATE seasons SET is_active = true WHERE year = 2026;
+
+-- Verify
+SELECT id, year, label, is_active FROM seasons;
+\q
+```
+
+Without this, the AdminPanel weeks dropdown shows "No weeks available" and `/api/seasons/active` returns 404.
+
+#### Spot-check Week 1 date range
+
+`seed-weeks` computes Week 1 as the Thursday after Labor Day through the following Monday. This is correct in nearly all years, but the NFL occasionally schedules a Wednesday opener (most recently 2026, to accommodate an Australia game on Thursday). If Week 1 has a Wednesday opener that year, the Wednesday game's kickoff will fall outside the seeded date range and the odds refresh will silently skip it with `skipped_no_week: 1`.
+
+After seeding, glance at the NFL's published Week 1 schedule for the season. If any game's date falls outside Thursday through Monday, adjust the range:
+
+```sql
+-- Example for 2026 (Wednesday Sept 9 opener):
+UPDATE weeks SET start_date = '2026-09-09' WHERE season_id = 1 AND week_number = 1;
+```
+
+The same applies if future seasons add Saturday or Tuesday games — extend the range to bracket every kickoff. Thanksgiving week (typically Week 12 or 13) routinely includes Wednesday and Friday games and is also worth spot-checking.
 
 ### 3.4 Bring up the backend and scheduler
 
@@ -403,9 +501,9 @@ Walk through these to confirm production is healthy:
 
 ## Phase 6: Ongoing operations
 
-### 6.1 Database backups
+### 6.1 Backups
 
-Drop this script at `/usr/local/bin/pick5-backup.sh` (as lherzog with sudo):
+Drop this script at `/usr/local/bin/pick5-backup.sh` (as lherzog with sudo). It dumps the Postgres database AND tars the user-uploaded avatar files — both need to be backed up to fully restore.
 
 ```bash
 #!/bin/bash
@@ -415,13 +513,21 @@ TS=$(date -u +%Y%m%dT%H%M%SZ)
 DEST=/var/backups/pick5
 mkdir -p "$DEST"
 
-# Dump from inside the Postgres container
-docker exec nfl-pick5-db-1 pg_dump -U pick5 pick5 | gzip > "$DEST/pick5-$TS.sql.gz"
+# Postgres dump from inside the container
+docker exec nfl-pick5-db-1 pg_dump -U pick5 pick5 | gzip > "$DEST/pick5-db-$TS.sql.gz"
 
-# Keep 14 days of local copies
-find "$DEST" -name 'pick5-*.sql.gz' -mtime +14 -delete
+# Avatar files — small but they're irreplaceable for users who uploaded
+# custom photos. Empty tar is fine if no one's uploaded anything yet.
+if [ -d /srv/nfl-pick5/data/avatars ]; then
+    tar -czf "$DEST/pick5-avatars-$TS.tar.gz" \
+        -C /srv/nfl-pick5/data avatars
+fi
 
-# Optional: rsync to Hetzner Storage Box
+# Keep 14 days of local copies for both
+find "$DEST" -name 'pick5-db-*.sql.gz' -mtime +14 -delete
+find "$DEST" -name 'pick5-avatars-*.tar.gz' -mtime +14 -delete
+
+# Optional: rsync everything to Hetzner Storage Box
 if [ -n "${STORAGE_BOX_USER:-}" ]; then
     rsync -az "$DEST/" "$STORAGE_BOX_USER@$STORAGE_BOX_USER.your-storagebox.de:./pick5-backups/"
 fi
@@ -464,6 +570,7 @@ srv-pick5: git pull
 # Rebuild frontend dist (only if frontend code changed)
 srv-pick5: docker build --target dist --output type=local,dest=./frontend/dist \
     --build-arg VITE_API_BASE_URL=https://pick5.yourdomain.com ./frontend
+srv-pick5: chmod -R go+rX /srv/nfl-pick5/frontend/dist
 
 # Rebuild backend/scheduler image (if backend code changed)
 srv-pick5: docker compose -f docker-compose.yml -f docker-compose.prod.yml build backend scheduler
@@ -505,20 +612,35 @@ srv-pick5: docker compose -f docker-compose.yml -f docker-compose.prod.yml resta
 
 ## Troubleshooting
 
+**nginx returns 500 Internal Server Error on `/`:**
+Most likely `/srv/nfl-pick5` has mode 750 instead of 755. Host nginx runs as `www-data` and needs `+x` (traverse) on the directory chain. Fix: `sudo chmod 755 /srv/nfl-pick5`. Check the nginx error log to confirm: `sudo tail /var/log/nginx/error.log` — you'll see "Permission denied" referencing the dist path.
+
+**nginx returns 403 Forbidden on `/` (even after fixing the 500):**
+The `/srv/nfl-pick5/frontend/dist` directory itself has mode 700 — BuildKit's `--output type=local` creates the destination directory restrictively even though the files inside have sensible modes. Fix: `chmod -R go+rX /srv/nfl-pick5/frontend/dist`. Confirm with `ls -la /srv/nfl-pick5/frontend/dist` — the `.` line should show `drwxr-xr-x`, not `drwx------`.
+
+**Google or Meta OAuth returns 400 redirect_uri_mismatch — error message shows `http://` instead of `https://`:**
+The Flask app isn't trusting the `X-Forwarded-Proto: https` header from nginx, so `url_for(_external=True)` generates `http://` URLs. Confirm `backend/app/__init__.py` includes `app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)` immediately after `app = Flask(__name__)`. Without it, the redirect URI sent to Google/Meta will never match what's registered in their consoles.
+
+**AdminPanel shows "No weeks available" in the week dropdown:**
+The Season row exists but `is_active` is `false`. The AdminPanel queries weeks via `/api/weeks?season_id=<active>`, and with no active season the dropdown stays empty. Fix in psql: `UPDATE seasons SET is_active = true WHERE year = <year>;`. Verify `SELECT id, year, is_active FROM seasons` returns one row with `is_active = t`.
+
+**Odds refresh response shows `skipped_no_week: N` for a non-zero N:**
+N games have kickoff times outside the week's `start_date`/`end_date` range. Most common cause is a Wednesday opener (most recently 2026) where `seed-weeks`' Thursday-start assumption misses the Wednesday game. Find the offending week and broaden its range — see "Spot-check Week 1 date range" in Phase 3.3. If `skipped_no_team: N` appears instead, the API returned a team name not in `backend/app/utils/teams.py`; check backend logs for the unmapped name.
+
 **OAuth callback returns "missing_profile_fields" 400:**
 The user's OAuth profile didn't include email. For Meta this is common — the user has an unverified email or declined the email scope. For Google it's rare and usually indicates the consent screen wasn't set up with the right scopes. Re-check Phase 1.3/1.4.
 
 **`docker compose` says ports already in use:**
 Something on the host is bound to 5000 (Flask) or 3000 (Vite). On the server this shouldn't happen since the prod overlay binds to `127.0.0.1:` instead of `0.0.0.0:`. If you see this, you've forgotten the `-f docker-compose.prod.yml` overlay.
 
-**`/api/admin/weeks/X/refresh-odds` returns 0 created, 0 updated, lots of skipped_no_week:**
-The week's date range doesn't bracket the games' kickoffs. Check `flask seed-weeks 2026` ran cleanly and the week dates look right (`SELECT * FROM weeks`). The most common cause is running this in the preseason when the Odds API is already returning Week 1 games, but you haven't seeded that season's weeks yet.
-
 **Browser console: "blocked by CORS policy":**
 The `FRONTEND_URL` env var doesn't match the actual origin you're loading from, or Flask-CORS isn't configured for the right paths. Check `docker compose logs backend` for the configured allowed origin on startup.
 
 **Scheduler not running scheduled jobs:**
 Confirm the timezone. Cron triggers use `America/New_York` per the design. If you see jobs running at the wrong times (offset by your local TZ), the container's TZ might be overriding. Verify with `docker compose ... exec scheduler date` — should be the container's UTC, with APScheduler internally converting to ET.
+
+**Uploaded avatar shows as a broken image / question mark in the browser (but reset-to-OAuth avatar works fine):**
+nginx is intercepting `/avatars/<uuid>.jpg` requests with the regex location block for static asset extensions and trying to serve them out of the React `dist/` directory, where they don't exist. The fix is to add a `location ^~ /avatars/ { proxy_pass http://127.0.0.1:5000; ... }` block to the nginx server config. The `^~` modifier is essential — without it, the regex still wins regardless of placement. See Phase 2.4c for the correct block. After editing: `sudo nginx -t && sudo systemctl reload nginx`. Reset-to-OAuth works because the OAuth avatar URL is on a different domain (e.g., `lh3.googleusercontent.com`), bypassing nginx entirely.
 
 **HTTPS works but `/auth/me` returns 401 and the session cookie isn't being set:**
 `SESSION_COOKIE_SECURE=true` requires HTTPS. If you somehow access via plain HTTP (e.g., a stale browser tab on port 80 that didn't redirect), the cookie won't be set. Hard-refresh on HTTPS.
