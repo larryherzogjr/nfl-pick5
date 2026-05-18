@@ -1,12 +1,25 @@
 import uuid
 from datetime import datetime, timezone
 
-from flask import Blueprint, current_app, jsonify, redirect, session, url_for
+from flask import Blueprint, current_app, g, jsonify, redirect, request, session, url_for
 
 from app import db, oauth
 from app.models import User
+from app.utils.auth_helpers import login_required
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
+
+
+def _serialize_user(user: User) -> dict:
+    return {
+        "id": str(user.id),
+        "email": user.email,
+        "display_name": user.display_name,
+        "avatar_url": user.avatar_url,
+        "is_admin": user.is_admin,
+        "oauth_provider": user.oauth_provider,
+        "created_at": user.created_at.isoformat() if user.created_at else None,
+    }
 
 
 @auth_bp.get("/login/google")
@@ -121,17 +134,28 @@ def me():
     if user is None:
         session.clear()
         return jsonify({"error": "unauthenticated"}), 401
-    return jsonify(
-        {
-            "id": str(user.id),
-            "email": user.email,
-            "display_name": user.display_name,
-            "avatar_url": user.avatar_url,
-            "is_admin": user.is_admin,
-            "oauth_provider": user.oauth_provider,
-            "created_at": user.created_at.isoformat() if user.created_at else None,
-        }
-    )
+    return jsonify(_serialize_user(user))
+
+
+@auth_bp.patch("/me")
+@login_required
+def update_me():
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict) or "display_name" not in body:
+        return jsonify({"error": "display_name_required"}), 400
+    raw = body["display_name"]
+    if not isinstance(raw, str):
+        return jsonify({"error": "display_name_invalid_type"}), 400
+    trimmed = raw.strip()
+    if not trimmed:
+        return jsonify({"error": "display_name_empty"}), 400
+    if len(trimmed) > 100:
+        return jsonify({"error": "display_name_too_long"}), 400
+
+    user = g.current_user
+    user.display_name = trimmed
+    db.session.commit()
+    return jsonify(_serialize_user(user))
 
 
 @auth_bp.post("/logout")

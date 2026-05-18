@@ -1,10 +1,12 @@
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useEffect, useRef, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import apiClient from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import TopNav from '../components/TopNav';
 import LoadingState from '../components/LoadingState';
 import ErrorState from '../components/ErrorState';
+
+const MAX_DISPLAY_NAME_LENGTH = 100;
 
 const TOTAL_WEEKS = 18;
 
@@ -64,16 +66,126 @@ function IdentityAvatar({ url, name }) {
   );
 }
 
+function DisplayNameEditor({ user, onDone }) {
+  const queryClient = useQueryClient();
+  const inputRef = useRef(null);
+  const [value, setValue] = useState(user.display_name ?? '');
+  const [errorMessage, setErrorMessage] = useState(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, []);
+
+  const trimmed = value.trim();
+  const isEmpty = trimmed.length === 0;
+  const isUnchanged = trimmed === (user.display_name ?? '').trim();
+  const isTooLong = trimmed.length > MAX_DISPLAY_NAME_LENGTH;
+  const canSave = !isEmpty && !isUnchanged && !isTooLong;
+
+  const mutation = useMutation({
+    mutationFn: async () => {
+      const { data } = await apiClient.patch('/auth/me', {
+        display_name: trimmed,
+      });
+      return data;
+    },
+    onSuccess: () => {
+      setErrorMessage(null);
+      queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
+      onDone();
+    },
+    onError: () => {
+      setErrorMessage("Couldn't update name — please try again");
+    },
+  });
+
+  const submit = () => {
+    if (!canSave || mutation.isPending) return;
+    mutation.mutate();
+  };
+
+  const cancel = () => {
+    if (mutation.isPending) return;
+    setValue(user.display_name ?? '');
+    onDone();
+  };
+
+  const onKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      submit();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      cancel();
+    }
+  };
+
+  return (
+    <div>
+      <input
+        ref={inputRef}
+        type="text"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={onKeyDown}
+        disabled={mutation.isPending}
+        maxLength={MAX_DISPLAY_NAME_LENGTH + 1}
+        aria-label="Display name"
+        className="w-full max-w-md rounded-md border border-slate-300 px-3 py-2 text-2xl font-bold text-slate-900 focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500 disabled:cursor-not-allowed disabled:bg-slate-50"
+      />
+      <div className="mt-2 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={submit}
+          disabled={!canSave || mutation.isPending}
+          className="rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {mutation.isPending ? 'Saving…' : 'Save'}
+        </button>
+        <button
+          type="button"
+          onClick={cancel}
+          disabled={mutation.isPending}
+          className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          Cancel
+        </button>
+      </div>
+      {errorMessage && (
+        <p className="mt-2 text-xs text-red-700">{errorMessage}</p>
+      )}
+    </div>
+  );
+}
+
 function IdentityCard({ user }) {
   const memberSince = formatMemberSince(user.created_at);
+  const [isEditing, setIsEditing] = useState(false);
   return (
     <section className="rounded-lg bg-white p-6 shadow-sm ring-1 ring-slate-200">
       <div className="flex items-start gap-4">
         <IdentityAvatar url={user.avatar_url} name={user.display_name} />
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-2xl font-bold text-slate-900">
-            {user.display_name}
-          </h1>
+          {isEditing ? (
+            <DisplayNameEditor
+              user={user}
+              onDone={() => setIsEditing(false)}
+            />
+          ) : (
+            <div className="flex items-start gap-3">
+              <h1 className="truncate text-2xl font-bold text-slate-900">
+                {user.display_name}
+              </h1>
+              <button
+                type="button"
+                onClick={() => setIsEditing(true)}
+                className="mt-1 shrink-0 text-sm font-medium text-slate-600 hover:text-slate-900 hover:underline focus:outline-none focus:ring-2 focus:ring-slate-300"
+              >
+                Edit
+              </button>
+            </div>
+          )}
           {user.email && (
             <p className="mt-1 truncate text-sm text-slate-500">{user.email}</p>
           )}
@@ -265,10 +377,25 @@ function PickRow({ pick }) {
 }
 
 function WeekCard({ week, isExpanded, onToggle }) {
-  const correct = week.picks.filter(
-    (p) => (p.points_awarded ?? 0) > 0,
+  const total = week.picks.length;
+  const graded = week.picks.filter(
+    (p) => p.points_awarded !== null && p.points_awarded !== undefined,
   ).length;
-  const summary = `${week.week_label} — ${correct} of ${week.picks.length} correct`;
+  const correct = week.picks.filter(
+    (p) =>
+      p.points_awarded !== null &&
+      p.points_awarded !== undefined &&
+      p.points_awarded > 0,
+  ).length;
+  const pending = total - graded;
+  let summary;
+  if (pending === 0) {
+    summary = `${week.week_label} — ${correct} of ${total} correct`;
+  } else if (graded === 0) {
+    summary = `${week.week_label} — ${total} pending`;
+  } else {
+    summary = `${week.week_label} — ${correct} of ${graded} correct, ${pending} pending`;
+  }
   const panelId = `pick-history-week-${week.week_id}`;
   return (
     <li className="overflow-hidden rounded-md ring-1 ring-slate-200">
