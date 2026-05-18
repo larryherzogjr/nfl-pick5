@@ -23,6 +23,7 @@ services:
       - db
     volumes:
       - ./backend:/app
+      - ./data/avatars:/app/data/avatars
 
   scheduler:
     build: ./backend

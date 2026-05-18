@@ -7,8 +7,17 @@ import LoadingState from '../components/LoadingState';
 import ErrorState from '../components/ErrorState';
 
 const MAX_DISPLAY_NAME_LENGTH = 100;
+const MAX_AVATAR_SIZE = 5 * 1024 * 1024;
 
 const TOTAL_WEEKS = 18;
+
+const AVATAR_ERROR_MESSAGES = {
+  file_too_large: 'File is too large (max 5 MB)',
+  invalid_type: 'Please choose a JPEG, PNG, WebP, or GIF',
+  invalid_image: "That file doesn't look like a valid image",
+  no_file: 'No file selected',
+  upload_failed: 'Upload failed. Try again.',
+};
 
 function getInitials(name) {
   if (!name) return '?';
@@ -62,6 +71,89 @@ function IdentityAvatar({ url, name }) {
   return (
     <div className="flex h-16 w-16 flex-none items-center justify-center rounded-full bg-slate-200 text-lg font-semibold text-slate-700 ring-1 ring-slate-200">
       {getInitials(name)}
+    </div>
+  );
+}
+
+function AvatarUploader() {
+  const queryClient = useQueryClient();
+  const inputRef = useRef(null);
+  const [progress, setProgress] = useState(0);
+  const [error, setError] = useState(null);
+
+  const mutation = useMutation({
+    mutationFn: async (file) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      const { data } = await apiClient.post('/auth/me/avatar', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        onUploadProgress: (e) => {
+          if (e.total) {
+            setProgress(Math.round((e.loaded * 100) / e.total));
+          }
+        },
+      });
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
+      setProgress(0);
+      setError(null);
+    },
+    onError: (err) => {
+      const code = err.response?.data?.error;
+      setError(code || 'upload_failed');
+      setProgress(0);
+    },
+  });
+
+  const onChange = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setError(null);
+    if (file.size > MAX_AVATAR_SIZE) {
+      setError('file_too_large');
+      return;
+    }
+    mutation.mutate(file);
+  };
+
+  const openPicker = () => {
+    if (mutation.isPending) return;
+    setError(null);
+    inputRef.current?.click();
+  };
+
+  const errorMessage = error
+    ? AVATAR_ERROR_MESSAGES[error] || AVATAR_ERROR_MESSAGES.upload_failed
+    : null;
+
+  return (
+    <div className="mt-2 flex flex-col items-start">
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/gif"
+        onChange={onChange}
+        className="hidden"
+      />
+      {mutation.isPending ? (
+        <span className="text-xs font-medium text-slate-500">
+          Uploading… {progress}%
+        </span>
+      ) : (
+        <button
+          type="button"
+          onClick={openPicker}
+          className="text-xs font-medium text-slate-600 hover:text-slate-900 hover:underline focus:outline-none focus:ring-2 focus:ring-slate-300"
+        >
+          Change
+        </button>
+      )}
+      {errorMessage && (
+        <p className="mt-1 text-xs text-red-700">{errorMessage}</p>
+      )}
     </div>
   );
 }
@@ -211,7 +303,10 @@ function IdentityCard({ user }) {
   return (
     <section className="rounded-lg bg-white p-6 shadow-sm ring-1 ring-slate-200">
       <div className="flex items-start gap-4">
-        <IdentityAvatar url={user.avatar_url} name={user.display_name} />
+        <div className="flex flex-none flex-col items-center">
+          <IdentityAvatar url={user.avatar_url} name={user.display_name} />
+          <AvatarUploader />
+        </div>
         <div className="min-w-0 flex-1">
           {isEditing ? (
             <DisplayNameEditor
