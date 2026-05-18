@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import apiClient from '../api/client';
 import { useAuth } from '../context/AuthContext';
@@ -149,6 +150,198 @@ function WeeklyStrip({ breakdown }) {
   );
 }
 
+function formatSpreadValue(spread) {
+  if (spread === 0) return 'PK';
+  if (spread > 0) return `+${spread}`;
+  return `${spread}`;
+}
+
+function formatLockedSpread(pick) {
+  const spread = pick.spread_at_pick;
+  if (spread === null || spread === undefined) return '—';
+  if (pick.picked_side === 'push') {
+    return `Push ${formatSpreadValue(spread)}`;
+  }
+  if (pick.picked_side === 'home') {
+    return `${pick.home_abbr} ${formatSpreadValue(spread)}`;
+  }
+  const awaySpread = spread === 0 ? 0 : -spread;
+  return `${pick.away_abbr} ${formatSpreadValue(awaySpread)}`;
+}
+
+function formatKickoffShort(iso) {
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    }).format(new Date(iso));
+  } catch {
+    return iso;
+  }
+}
+
+function PickedSideBadge({ pick }) {
+  let label;
+  if (pick.picked_side === 'home') label = pick.home_abbr;
+  else if (pick.picked_side === 'away') label = pick.away_abbr;
+  else label = 'Push';
+  return (
+    <span className="inline-flex items-center rounded-md bg-slate-900 px-2 py-0.5 text-xs font-semibold text-white">
+      {label}
+    </span>
+  );
+}
+
+function PickOutcome({ pick }) {
+  if (!pick.is_final) {
+    return (
+      <div className="flex flex-col items-end gap-1">
+        <span className="text-xs text-slate-500">
+          {formatKickoffShort(pick.kickoff)}
+        </span>
+        <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600 ring-1 ring-slate-200">
+          Pending
+        </span>
+      </div>
+    );
+  }
+  const scored =
+    pick.points_awarded !== null && pick.points_awarded !== undefined;
+  const won = scored && pick.points_awarded > 0;
+  const score =
+    pick.score_home !== null && pick.score_away !== null
+      ? `${pick.away_abbr} ${pick.score_away} – ${pick.home_abbr} ${pick.score_home}`
+      : 'Final';
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <span className="text-xs font-medium text-slate-700">{score}</span>
+      {won ? (
+        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-800 ring-1 ring-emerald-200">
+          <span aria-hidden="true">✓</span>+{pick.points_awarded} pt
+          {pick.points_awarded === 1 ? '' : 's'}
+        </span>
+      ) : (
+        <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700 ring-1 ring-red-200">
+          <span aria-hidden="true">✗</span>0 pts
+        </span>
+      )}
+    </div>
+  );
+}
+
+function PickRow({ pick }) {
+  return (
+    <li className="flex items-start justify-between gap-4 px-4 py-3">
+      <div className="min-w-0 flex-1">
+        <div
+          className="text-sm font-semibold text-slate-900"
+          title={`${pick.away_team} @ ${pick.home_team}`}
+        >
+          <span className="text-slate-500">{pick.away_abbr}</span>{' '}
+          <span className="font-normal text-slate-400">@</span>{' '}
+          <span>{pick.home_abbr}</span>
+        </div>
+        <div className="mt-0.5 truncate text-xs text-slate-500">
+          {pick.away_team} @ {pick.home_team}
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-600">
+          <span className="font-medium text-slate-700">
+            Locked: {formatLockedSpread(pick)}
+          </span>
+          <span className="text-slate-400">•</span>
+          <span className="inline-flex items-center gap-1 text-slate-600">
+            Picked: <PickedSideBadge pick={pick} />
+          </span>
+        </div>
+      </div>
+      <div className="shrink-0">
+        <PickOutcome pick={pick} />
+      </div>
+    </li>
+  );
+}
+
+function WeekCard({ week, isExpanded, onToggle }) {
+  const correct = week.picks.filter(
+    (p) => (p.points_awarded ?? 0) > 0,
+  ).length;
+  const summary = `${week.week_label} — ${correct} of ${week.picks.length} correct`;
+  const panelId = `pick-history-week-${week.week_id}`;
+  return (
+    <li className="overflow-hidden rounded-md ring-1 ring-slate-200">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={isExpanded}
+        aria-controls={panelId}
+        className="flex w-full items-center justify-between gap-3 bg-white px-4 py-3 text-left hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-300"
+      >
+        <span className="text-sm font-semibold text-slate-900">{summary}</span>
+        <span
+          aria-hidden="true"
+          className={`text-slate-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+        >
+          ▶
+        </span>
+      </button>
+      {isExpanded && (
+        <ul
+          id={panelId}
+          className="divide-y divide-slate-100 border-t border-slate-200 bg-slate-50/30"
+        >
+          {week.picks.map((p) => (
+            <PickRow key={p.pick_id} pick={p} />
+          ))}
+        </ul>
+      )}
+    </li>
+  );
+}
+
+function PickHistoryCard({ data }) {
+  const weeks = data?.weeks ?? [];
+  const firstWeekId = weeks[0]?.week_id ?? null;
+  const [overrides, setOverrides] = useState({});
+
+  if (weeks.length === 0) {
+    return (
+      <section className="mt-6 rounded-lg bg-white p-6 shadow-sm ring-1 ring-slate-200">
+        <h2 className="text-lg font-semibold text-slate-900">Pick History</h2>
+        <p className="mt-3 text-sm text-slate-500">No picks yet</p>
+      </section>
+    );
+  }
+
+  const isExpanded = (weekId) => {
+    if (overrides[weekId] !== undefined) return overrides[weekId];
+    return weekId === firstWeekId;
+  };
+
+  return (
+    <section className="mt-6 rounded-lg bg-white p-6 shadow-sm ring-1 ring-slate-200">
+      <h2 className="text-lg font-semibold text-slate-900">Pick History</h2>
+      <ul className="mt-4 flex flex-col gap-2">
+        {weeks.map((w) => (
+          <WeekCard
+            key={w.week_id}
+            week={w}
+            isExpanded={isExpanded(w.week_id)}
+            onToggle={() =>
+              setOverrides((prev) => ({
+                ...prev,
+                [w.week_id]: !isExpanded(w.week_id),
+              }))
+            }
+          />
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 function StatsCard({ season, entries, currentUserId }) {
   const myEntry = (entries ?? []).find((e) => e.user.id === currentUserId);
   const points = myEntry?.points ?? 0;
@@ -204,6 +397,23 @@ export default function Profile() {
     queryKey: ['leaderboard', 'season', season?.id],
     queryFn: async () => {
       const { data } = await apiClient.get('/api/leaderboard', {
+        params: { season_id: season.id },
+      });
+      return data;
+    },
+    enabled: !!season?.id,
+  });
+
+  const {
+    data: pickHistory,
+    isLoading: pickHistoryLoading,
+    isError: pickHistoryIsError,
+    error: pickHistoryError,
+    refetch: refetchPickHistory,
+  } = useQuery({
+    queryKey: ['users', 'me', 'picks', season?.id],
+    queryFn: async () => {
+      const { data } = await apiClient.get('/api/users/me/picks', {
         params: { season_id: season.id },
       });
       return data;
@@ -268,6 +478,26 @@ export default function Profile() {
                 entries={entries ?? []}
                 currentUserId={user.id}
               />
+            )}
+
+            {season && pickHistoryLoading && (
+              <div className="mt-6">
+                <LoadingState label="Loading pick history…" />
+              </div>
+            )}
+
+            {season && pickHistoryIsError && (
+              <div className="mt-6">
+                <ErrorState
+                  error={pickHistoryError}
+                  message="Failed to load pick history."
+                  onRetry={refetchPickHistory}
+                />
+              </div>
+            )}
+
+            {season && !pickHistoryLoading && !pickHistoryIsError && (
+              <PickHistoryCard data={pickHistory} />
             )}
           </>
         )}
