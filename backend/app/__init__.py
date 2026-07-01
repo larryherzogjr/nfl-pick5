@@ -59,6 +59,7 @@ def create_app(config_class: type = Config) -> Flask:
 
     from app.routes.admin import admin_bp
     from app.routes.auth import auth_bp
+    from app.routes.health import health_bp
     from app.routes.leaderboard import leaderboard_bp
     from app.routes.media import media_bp
     from app.routes.picks import picks_bp
@@ -72,6 +73,7 @@ def create_app(config_class: type = Config) -> Flask:
     app.register_blueprint(leaderboard_bp)
     app.register_blueprint(users_bp)
     app.register_blueprint(media_bp)
+    app.register_blueprint(health_bp)
 
     from app.commands import seed_weeks
 

@@ -608,9 +608,37 @@ You should see entries like "refresh_odds_job complete: created=N updated=N ..."
 srv-pick5: docker compose -f docker-compose.yml -f docker-compose.prod.yml restart scheduler
 ```
 
+### 6.5 Process supervision & health
+
+Every compose service has `restart: unless-stopped`, and the Docker daemon starts on boot (`systemctl is-enabled docker` should be `enabled` — the default on Ubuntu). Together this means:
+
+- **Host reboots** — Docker starts on boot; Docker restarts each container that wasn't explicitly stopped.
+- **Container crashes** (OOM, gunicorn worker deadlock, uncaught exception in the scheduler) — Docker restarts the container. Backoff is exponential.
+- **Explicit `docker compose down`** — containers stay down. The "unless-stopped" policy respects manual stops so you're not fighting Docker during maintenance.
+
+The backend has a `/healthz` endpoint that pings the DB with `SELECT 1`. Docker uses it as a healthcheck (30s interval) and gates the scheduler's startup on the db being healthy. To spot-check:
+
+```
+srv-pick5: docker compose -f docker-compose.yml -f docker-compose.prod.yml ps
+```
+
+Column `STATUS` should read `Up X minutes (healthy)` for `db` and `backend`. `scheduler` shows only `Up X minutes` (no healthcheck).
+
+For external monitoring (recommended — Docker's restart policy won't help if the whole box is down or if Nginx is misconfigured), point uptimerobot.com or healthchecks.io at `https://pick5.yourdomain.com/healthz`. A 200 response means Nginx + backend + DB are all reachable.
+
+If a container is crash-looping (restart policy masking a real config error), watch it:
+
+```
+srv-pick5: docker compose -f docker-compose.yml -f docker-compose.prod.yml ps    # look for "Restarting"
+srv-pick5: docker compose -f docker-compose.yml -f docker-compose.prod.yml logs backend --tail 100
+```
+
 ---
 
 ## Troubleshooting
+
+**nginx returns 502 Bad Gateway on `/auth/*` or `/api/*` after the site was previously working:**
+The backend container isn't running. Likely causes: (1) host was rebooted before `restart: unless-stopped` was in place, (2) `docker compose down` was run and never brought back up, (3) the backend is crash-looping. Check `docker compose -f docker-compose.yml -f docker-compose.prod.yml ps` — if backend is missing, `docker compose ... up -d`; if it's `Restarting`, tail `docker compose ... logs backend` for the underlying error (often a missing env var or DB connectivity issue). Once the compose file includes the restart policies (see §6.5), a reboot will bring things back automatically.
 
 **nginx returns 500 Internal Server Error on `/`:**
 Most likely `/srv/nfl-pick5` has mode 750 instead of 755. Host nginx runs as `www-data` and needs `+x` (traverse) on the directory chain. Fix: `sudo chmod 755 /srv/nfl-pick5`. Check the nginx error log to confirm: `sudo tail /var/log/nginx/error.log` — you'll see "Permission denied" referencing the dist path.
