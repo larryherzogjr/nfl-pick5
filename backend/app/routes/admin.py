@@ -4,12 +4,33 @@ from decimal import Decimal, InvalidOperation
 from flask import Blueprint, jsonify, request
 
 from app import db
-from app.models import Game, Week
+from app.models import Game, User, Week
 from app.services.odds_service import refresh_odds
 from app.services.score_service import refresh_scores, score_game
 from app.utils.auth_helpers import admin_required
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/api/admin")
+
+
+@admin_bp.get("/users")
+@admin_required
+def list_users():
+    users = User.query.order_by(User.created_at.desc()).all()
+    return jsonify(
+        [
+            {
+                "id": str(u.id),
+                "email": u.email,
+                "display_name": u.display_name,
+                "avatar_url": u.avatar_url,
+                "oauth_provider": u.oauth_provider,
+                "is_admin": u.is_admin,
+                "created_at": u.created_at.isoformat() if u.created_at else None,
+                "last_login": u.last_login.isoformat() if u.last_login else None,
+            }
+            for u in users
+        ]
+    )
 
 
 @admin_bp.post("/weeks/<int:week_id>/refresh-odds")

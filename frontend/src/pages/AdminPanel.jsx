@@ -56,6 +56,147 @@ function formatKickoff(iso) {
   }
 }
 
+function formatDate(iso) {
+  if (!iso) return '—';
+  try {
+    return new Date(iso).toLocaleDateString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  } catch {
+    return iso;
+  }
+}
+
+function formatDateTime(iso) {
+  if (!iso) return 'Never';
+  try {
+    return new Date(iso).toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  } catch {
+    return iso;
+  }
+}
+
+function getInitials(name) {
+  if (!name) return '?';
+  const parts = name.trim().split(/\s+/);
+  const first = parts[0]?.[0] ?? '';
+  const last = parts.length > 1 ? parts[parts.length - 1][0] : '';
+  return (first + last).toUpperCase() || '?';
+}
+
+function UserRow({ user }) {
+  return (
+    <tr className="border-t border-slate-200">
+      <td className="whitespace-nowrap px-3 py-2">
+        <div className="flex items-center gap-2">
+          {user.avatar_url ? (
+            <img
+              src={user.avatar_url}
+              alt=""
+              className="h-8 w-8 flex-none rounded-full object-cover ring-1 ring-slate-200"
+            />
+          ) : (
+            <div className="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-slate-200 text-xs font-semibold text-slate-700 ring-1 ring-slate-200">
+              {getInitials(user.display_name)}
+            </div>
+          )}
+          <span className="text-sm font-medium text-slate-900">
+            {user.display_name}
+          </span>
+          {user.is_admin && (
+            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800 ring-1 ring-amber-200">
+              Admin
+            </span>
+          )}
+        </div>
+      </td>
+      <td className="px-3 py-2 text-sm text-slate-600">
+        <span className="break-all">{user.email}</span>
+      </td>
+      <td className="whitespace-nowrap px-3 py-2 text-xs text-slate-600">
+        {user.oauth_provider === 'google' && 'Google'}
+        {user.oauth_provider === 'meta' && 'Meta'}
+        {!['google', 'meta'].includes(user.oauth_provider) && user.oauth_provider}
+      </td>
+      <td className="whitespace-nowrap px-3 py-2 text-xs text-slate-600">
+        {formatDate(user.created_at)}
+      </td>
+      <td className="whitespace-nowrap px-3 py-2 text-xs text-slate-600">
+        {formatDateTime(user.last_login)}
+      </td>
+    </tr>
+  );
+}
+
+function UsersSection() {
+  const {
+    data: users,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ['admin', 'users'],
+    queryFn: async () => (await apiClient.get('/api/admin/users')).data,
+  });
+
+  return (
+    <section className="rounded-lg bg-white p-5 shadow-sm ring-1 ring-slate-200">
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="text-lg font-semibold text-slate-900">
+          Registered users
+        </h2>
+        {users && (
+          <span className="text-xs text-slate-500">
+            {users.length} total
+          </span>
+        )}
+      </div>
+      {isLoading && <LoadingState size="sm" className="mt-4" />}
+      {isError && (
+        <div className="mt-4">
+          <ErrorState
+            error={error}
+            message="Failed to load users."
+            onRetry={refetch}
+          />
+        </div>
+      )}
+      {users && users.length === 0 && (
+        <p className="mt-4 text-sm text-slate-500">No users yet.</p>
+      )}
+      {users && users.length > 0 && (
+        <div className="mt-4 overflow-x-auto">
+          <table className="min-w-full border-collapse">
+            <thead>
+              <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <th className="px-3 py-2">Name</th>
+                <th className="px-3 py-2">Email</th>
+                <th className="px-3 py-2">Provider</th>
+                <th className="px-3 py-2">Joined</th>
+                <th className="px-3 py-2">Last login</th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((u) => (
+                <UserRow key={u.id} user={u} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function useGamesForWeek(weekId) {
   return useQuery({
     queryKey: ['games', 'week', weekId],
@@ -518,6 +659,8 @@ export default function AdminPanel() {
             </ul>
           )}
         </section>
+
+        <UsersSection />
       </main>
     </div>
   );
