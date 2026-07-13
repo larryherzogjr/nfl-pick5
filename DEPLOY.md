@@ -6,7 +6,7 @@ This runbook takes the feature-complete codebase and walks it onto the Hetzner b
 - The codebase is in a GitHub repo (`larryherzogjr/nfl-pick5`) on the `main` branch.
 - You're working from your MacBook with SSH access as `lherzog`.
 - The application directory `/srv/nfl-pick5` is owned `pick5:pick5` with mode **755** (not 750). Host nginx runs as `www-data` and must be able to traverse into this directory to serve the React bundle. If you provisioned it 750, fix with `sudo chmod 755 /srv/nfl-pick5` before continuing.
-- The Flask app factory wraps `app.wsgi_app` with `werkzeug.middleware.proxy_fix.ProxyFix(app.wsgi_app, x_proto=1, x_host=1)`. Without this, `url_for(_external=True)` generates `http://` URLs (because Flask sees the proxied request from 127.0.0.1 as plain HTTP), which breaks Google/Meta OAuth redirect-URI matching. This lives in `backend/app/__init__.py` in the current codebase.
+- The Flask app factory wraps `app.wsgi_app` with `werkzeug.middleware.proxy_fix.ProxyFix(app.wsgi_app, x_proto=1, x_host=1)`. Without this, `url_for(_external=True)` generates `http://` URLs (because Flask sees the proxied request from 127.0.0.1 as plain HTTP), which breaks Google OAuth redirect-URI matching. This lives in `backend/app/__init__.py` in the current codebase.
 
 Work through this top to bottom. Each phase has a checklist; tick items as you go. Code blocks in `dev:` boxes run on your MacBook, `srv-lherzog:` runs on the server as `lherzog`, `srv-pick5:` runs as `pick5` (via `sudo -iu pick5`).
 
@@ -58,18 +58,7 @@ At https://console.cloud.google.com:
 - [ ] Authorized redirect URI: `https://pick5.yourdomain.com/auth/callback/google`
 - [ ] Save the Client ID and Client Secret somewhere safe — these go into the production `.env`
 
-### 1.4 Meta (Facebook) OAuth credentials
-
-At https://developers.facebook.com:
-
-- [ ] Create an app (consumer type, "Authenticate users with Facebook Login")
-- [ ] Add the Facebook Login product
-- [ ] Settings → Basic — note the App ID and App Secret
-- [ ] Facebook Login → Settings → Valid OAuth Redirect URIs: `https://pick5.yourdomain.com/auth/callback/meta`
-- [ ] Permissions and Features → request `email` and `public_profile` (these are usually granted by default in standard mode)
-- [ ] If the app needs to leave dev mode to accept any user, you'll need to submit it for review. For a private home-lab pool of friends, leaving it in dev mode and adding each person as a test user is simpler.
-
-### 1.5 The Odds API key
+### 1.4 The Odds API key
 
 At https://the-odds-api.com:
 
@@ -78,7 +67,7 @@ At https://the-odds-api.com:
 - [ ] Account → API Key — copy it
 - [ ] Free tier is 500 requests/month — well above our estimated 208/month usage
 
-### 1.6 Hetzner Storage Box (optional, recommended)
+### 1.5 Hetzner Storage Box (optional, recommended)
 
 For offsite Postgres backups, order a Storage Box from Hetzner (BX11 is €3.81/month for 1 TB; way more than you need but it's the cheapest plan).
 
@@ -116,7 +105,9 @@ Fill in real values:
 # Generate a strong random secret for Flask sessions
 FLASK_SECRET_KEY=  # paste output of: python3 -c "import secrets; print(secrets.token_hex(32))"
 
-# The DB password lives only in compose's internal network, but rotate it from "pick5" in production
+# Use the same strong password in both values. Compose passes POSTGRES_PASSWORD
+# to PostgreSQL and DATABASE_URL to the backend and scheduler.
+POSTGRES_PASSWORD=<strong-random-password>
 DATABASE_URL=postgresql://pick5:<strong-random-password>@db:5432/pick5
 
 # From Phase 1.3
@@ -124,10 +115,6 @@ GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 
 # From Phase 1.4
-META_APP_ID=
-META_APP_SECRET=
-
-# From Phase 1.5
 ODDS_API_KEY=
 ODDS_PREFERRED_BOOK=fanduel
 
@@ -137,7 +124,9 @@ VITE_API_BASE_URL=https://pick5.yourdomain.com
 SESSION_COOKIE_SECURE=true
 ```
 
-**Important** about `DATABASE_URL`: if you change the Postgres password from the default `pick5`, you also need to update `docker-compose.yml`'s db service `POSTGRES_PASSWORD` env var to match (or override it in `docker-compose.prod.yml`). The cleanest approach is to add a `POSTGRES_PASSWORD` env var to `.env` and reference it via `${POSTGRES_PASSWORD}` in compose.
+**Important**: `POSTGRES_PASSWORD` and the password embedded in `DATABASE_URL`
+must match. Compose reads both from `.env`; do not edit committed Compose files to
+rotate production credentials.
 
 Lock the file down:
 
@@ -232,6 +221,11 @@ srv-lherzog: sudo certbot renew --dry-run
 
 #### 2.4c Full production config
 
+The repository now keeps the live-domain configuration at
+`deploy/nginx-pick5.conf`. Copy that file to
+`/etc/nginx/sites-available/pick5`, or use the equivalent annotated template
+below when deploying a different domain.
+
 ```
 srv-lherzog: sudo nano /etc/nginx/sites-available/pick5
 ```
@@ -267,8 +261,19 @@ server {
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
 
-    # Reasonable upload limits
-    client_max_body_size 1m;
+    # The application accepts avatars up to 5 MB. Leave room for multipart overhead.
+    client_max_body_size 6m;
+
+    # Database-aware health check. Keep this before the SPA fallback so external
+    # monitors test Nginx + Flask + PostgreSQL rather than receiving index.html.
+    location = /healthz {
+        proxy_pass http://127.0.0.1:5000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+    }
 
     # Backend API
     location /api/ {
@@ -424,7 +429,7 @@ srv-pick5: docker compose -f docker-compose.yml -f docker-compose.prod.yml logs 
 srv-pick5: docker compose -f docker-compose.yml -f docker-compose.prod.yml logs scheduler
 ```
 
-Scheduler log should show "Scheduler starting" plus the 5 registered jobs with cron triggers.
+Scheduler log should show "Scheduler starting" plus the 6 registered jobs with cron triggers.
 
 ### 3.5 First odds refresh
 
@@ -482,7 +487,7 @@ Navigate to `/week/<the-week-id>` to see the games rendered with spreads.
 Walk through these to confirm production is healthy:
 
 - [ ] `https://pick5.yourdomain.com` redirects unauthenticated users to `/login`
-- [ ] OAuth login works for both Google and Meta
+- [ ] Google OAuth login works
 - [ ] After login, `/` redirects to the current week (`/week/<id>`)
 - [ ] Games render on the week view with spreads
 - [ ] You can make picks and submit (test with 1-2 picks first)
@@ -646,8 +651,8 @@ Most likely `/srv/nfl-pick5` has mode 750 instead of 755. Host nginx runs as `ww
 **nginx returns 403 Forbidden on `/` (even after fixing the 500):**
 The `/srv/nfl-pick5/frontend/dist` directory itself has mode 700 — BuildKit's `--output type=local` creates the destination directory restrictively even though the files inside have sensible modes. Fix: `chmod -R go+rX /srv/nfl-pick5/frontend/dist`. Confirm with `ls -la /srv/nfl-pick5/frontend/dist` — the `.` line should show `drwxr-xr-x`, not `drwx------`.
 
-**Google or Meta OAuth returns 400 redirect_uri_mismatch — error message shows `http://` instead of `https://`:**
-The Flask app isn't trusting the `X-Forwarded-Proto: https` header from nginx, so `url_for(_external=True)` generates `http://` URLs. Confirm `backend/app/__init__.py` includes `app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)` immediately after `app = Flask(__name__)`. Without it, the redirect URI sent to Google/Meta will never match what's registered in their consoles.
+**Google OAuth returns 400 redirect_uri_mismatch — error message shows `http://` instead of `https://`:**
+The Flask app isn't trusting the `X-Forwarded-Proto: https` header from nginx, so `url_for(_external=True)` generates `http://` URLs. Confirm `backend/app/__init__.py` includes `app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)` immediately after `app = Flask(__name__)`. Without it, the redirect URI sent to Google will never match what's registered in Google Cloud Console.
 
 **AdminPanel shows "No weeks available" in the week dropdown:**
 The Season row exists but `is_active` is `false`. The AdminPanel queries weeks via `/api/weeks?season_id=<active>`, and with no active season the dropdown stays empty. Fix in psql: `UPDATE seasons SET is_active = true WHERE year = <year>;`. Verify `SELECT id, year, is_active FROM seasons` returns one row with `is_active = t`.
@@ -656,7 +661,7 @@ The Season row exists but `is_active` is `false`. The AdminPanel queries weeks v
 N games have kickoff times outside the week's `start_date`/`end_date` range. Most common cause is a Wednesday opener (most recently 2026) where `seed-weeks`' Thursday-start assumption misses the Wednesday game. Find the offending week and broaden its range — see "Spot-check Week 1 date range" in Phase 3.3. If `skipped_no_team: N` appears instead, the API returned a team name not in `backend/app/utils/teams.py`; check backend logs for the unmapped name.
 
 **OAuth callback returns "missing_profile_fields" 400:**
-The user's OAuth profile didn't include email. For Meta this is common — the user has an unverified email or declined the email scope. For Google it's rare and usually indicates the consent screen wasn't set up with the right scopes. Re-check Phase 1.3/1.4.
+The user's Google profile didn't include email. This is rare and usually indicates the consent screen wasn't set up with the right scopes. Re-check Phase 1.3.
 
 **`docker compose` says ports already in use:**
 Something on the host is bound to 5000 (Flask) or 3000 (Vite). On the server this shouldn't happen since the prod overlay binds to `127.0.0.1:` instead of `0.0.0.0:`. If you see this, you've forgotten the `-f docker-compose.prod.yml` overlay.

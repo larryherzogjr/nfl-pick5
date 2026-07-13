@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 function HamburgerIcon({ open }) {
   return (
@@ -34,15 +34,15 @@ export default function TopNav() {
   const handleLogout = async () => {
     closeMenu();
     await logout();
-    navigate('/login', { replace: true });
+    navigate("/login", { replace: true });
   };
 
   const navLinks = [
-    { to: '/', label: 'Home' },
-    { to: '/leaderboard', label: 'Leaderboard' },
-    { to: '/rules', label: 'Rules' },
-    { to: '/profile', label: 'Profile' },
-    ...(user?.is_admin ? [{ to: '/admin', label: 'Admin' }] : []),
+    { to: "/", label: "Home" },
+    { to: "/leaderboard", label: "Leaderboard" },
+    { to: "/rules", label: "Rules" },
+    { to: "/profile", label: "Profile" },
+    ...(user?.is_admin ? [{ to: "/admin", label: "Admin" }] : []),
   ];
 
   return (
@@ -58,11 +58,7 @@ export default function TopNav() {
           </Link>
           <div className="hidden items-center gap-4 text-sm text-slate-600 sm:flex">
             {navLinks.map((link) => (
-              <Link
-                key={link.to}
-                to={link.to}
-                className="hover:text-slate-900"
-              >
+              <Link key={link.to} to={link.to} className="hover:text-slate-900">
                 {link.label}
               </Link>
             ))}
@@ -85,7 +81,9 @@ export default function TopNav() {
           <button
             type="button"
             onClick={() => setMenuOpen((o) => !o)}
-            aria-label={menuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+            aria-label={
+              menuOpen ? "Close navigation menu" : "Open navigation menu"
+            }
             aria-expanded={menuOpen}
             aria-controls="mobile-nav-panel"
             className="-mr-2 flex h-11 w-11 items-center justify-center rounded-md text-slate-700 hover:bg-slate-100 sm:hidden"

@@ -25,7 +25,10 @@ class Pick(db.Model):
         index=True,
     )
     game_id = db.Column(
-        db.Integer, db.ForeignKey("games.id", ondelete="CASCADE"), nullable=False, index=True
+        db.Integer,
+        db.ForeignKey("games.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     picked_side = db.Column(db.String(10), nullable=False)
     spread_at_pick = db.Column(db.Numeric(4, 1), nullable=False)

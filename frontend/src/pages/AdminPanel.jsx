@@ -1,14 +1,14 @@
-import { useEffect, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import apiClient from '../api/client';
-import TopNav from '../components/TopNav';
-import LoadingState from '../components/LoadingState';
-import ErrorState from '../components/ErrorState';
+import { useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import apiClient from "../api/client";
+import TopNav from "../components/TopNav";
+import LoadingState from "../components/LoadingState";
+import ErrorState from "../components/ErrorState";
 
 function WeekDropdown({ weeks, value, onChange, disabled }) {
   return (
     <select
-      value={value ?? ''}
+      value={value ?? ""}
       onChange={(e) => onChange(Number(e.target.value))}
       disabled={disabled || !weeks || weeks.length === 0}
       className="min-h-[44px] rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
@@ -30,7 +30,7 @@ function ResultPanel({ result, error }) {
   if (error) {
     return (
       <pre className="mt-3 max-h-48 overflow-auto rounded-md bg-red-50 p-3 text-xs text-red-800 ring-1 ring-red-200">
-        {typeof error === 'string' ? error : JSON.stringify(error, null, 2)}
+        {typeof error === "string" ? error : JSON.stringify(error, null, 2)}
       </pre>
     );
   }
@@ -45,11 +45,11 @@ function formatKickoff(iso) {
   try {
     const d = new Date(iso);
     return d.toLocaleString(undefined, {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
     });
   } catch {
     return iso;
@@ -57,12 +57,12 @@ function formatKickoff(iso) {
 }
 
 function formatDate(iso) {
-  if (!iso) return '—';
+  if (!iso) return "—";
   try {
     return new Date(iso).toLocaleDateString(undefined, {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
+      year: "numeric",
+      month: "short",
+      day: "numeric",
     });
   } catch {
     return iso;
@@ -70,14 +70,14 @@ function formatDate(iso) {
 }
 
 function formatDateTime(iso) {
-  if (!iso) return 'Never';
+  if (!iso) return "Never";
   try {
     return new Date(iso).toLocaleString(undefined, {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
     });
   } catch {
     return iso;
@@ -85,11 +85,11 @@ function formatDateTime(iso) {
 }
 
 function getInitials(name) {
-  if (!name) return '?';
+  if (!name) return "?";
   const parts = name.trim().split(/\s+/);
-  const first = parts[0]?.[0] ?? '';
-  const last = parts.length > 1 ? parts[parts.length - 1][0] : '';
-  return (first + last).toUpperCase() || '?';
+  const first = parts[0]?.[0] ?? "";
+  const last = parts.length > 1 ? parts[parts.length - 1][0] : "";
+  return (first + last).toUpperCase() || "?";
 }
 
 function UserRow({ user }) {
@@ -122,9 +122,8 @@ function UserRow({ user }) {
         <span className="break-all">{user.email}</span>
       </td>
       <td className="whitespace-nowrap px-3 py-2 text-xs text-slate-600">
-        {user.oauth_provider === 'google' && 'Google'}
-        {user.oauth_provider === 'meta' && 'Meta'}
-        {!['google', 'meta'].includes(user.oauth_provider) && user.oauth_provider}
+        {user.oauth_provider === "google" && "Google"}
+        {user.oauth_provider !== "google" && "Legacy"}
       </td>
       <td className="whitespace-nowrap px-3 py-2 text-xs text-slate-600">
         {formatDate(user.created_at)}
@@ -144,8 +143,8 @@ function UsersSection() {
     error,
     refetch,
   } = useQuery({
-    queryKey: ['admin', 'users'],
-    queryFn: async () => (await apiClient.get('/api/admin/users')).data,
+    queryKey: ["admin", "users"],
+    queryFn: async () => (await apiClient.get("/api/admin/users")).data,
   });
 
   return (
@@ -155,9 +154,7 @@ function UsersSection() {
           Registered users
         </h2>
         {users && (
-          <span className="text-xs text-slate-500">
-            {users.length} total
-          </span>
+          <span className="text-xs text-slate-500">{users.length} total</span>
         )}
       </div>
       {isLoading && <LoadingState size="sm" className="mt-4" />}
@@ -199,7 +196,7 @@ function UsersSection() {
 
 function useGamesForWeek(weekId) {
   return useQuery({
-    queryKey: ['games', 'week', weekId],
+    queryKey: ["games", "week", weekId],
     queryFn: async () => {
       const { data } = await apiClient.get(`/api/weeks/${weekId}/games`);
       return data;
@@ -211,10 +208,10 @@ function useGamesForWeek(weekId) {
 function ScoreRow({ game, onSuccess }) {
   const queryClient = useQueryClient();
   const [home, setHome] = useState(
-    game.score_home != null ? String(game.score_home) : '',
+    game.score_home != null ? String(game.score_home) : "",
   );
   const [away, setAway] = useState(
-    game.score_away != null ? String(game.score_away) : '',
+    game.score_away != null ? String(game.score_away) : "",
   );
   const [err, setErr] = useState(null);
 
@@ -231,11 +228,13 @@ function ScoreRow({ game, onSuccess }) {
     },
     onSuccess: (data) => {
       setErr(null);
-      queryClient.invalidateQueries({ queryKey: ['games', 'week', game.week_id] });
+      queryClient.invalidateQueries({
+        queryKey: ["games", "week", game.week_id],
+      });
       onSuccess?.(data);
     },
     onError: (e) => {
-      setErr(e?.response?.data?.error ?? 'unknown_error');
+      setErr(e?.response?.data?.error ?? "unknown_error");
     },
   });
 
@@ -244,7 +243,7 @@ function ScoreRow({ game, onSuccess }) {
     const h = Number(home);
     const a = Number(away);
     if (!Number.isInteger(h) || !Number.isInteger(a) || h < 0 || a < 0) {
-      setErr('Scores must be non-negative integers.');
+      setErr("Scores must be non-negative integers.");
       return;
     }
     mutation.mutate();
@@ -256,14 +255,16 @@ function ScoreRow({ game, onSuccess }) {
         <div className="text-sm font-semibold text-slate-900">
           {game.away_abbr} @ {game.home_abbr}
         </div>
-        <div className="text-xs text-slate-500">{formatKickoff(game.kickoff)}</div>
+        <div className="text-xs text-slate-500">
+          {formatKickoff(game.kickoff)}
+        </div>
       </div>
       <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-600">
         <span className="break-words">
-          Current:{' '}
+          Current:{" "}
           {game.score_home != null && game.score_away != null
             ? `${game.away_abbr} ${game.score_away} — ${game.home_abbr} ${game.score_home}`
-            : '—'}
+            : "—"}
         </span>
         {game.is_final ? (
           <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-800">
@@ -301,7 +302,7 @@ function ScoreRow({ game, onSuccess }) {
           disabled={mutation.isPending}
           className="min-h-[44px] rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {mutation.isPending ? 'Saving…' : 'Set score'}
+          {mutation.isPending ? "Saving…" : "Set score"}
         </button>
         {err && (
           <span className="basis-full text-xs text-red-700 sm:basis-auto">
@@ -316,7 +317,7 @@ function ScoreRow({ game, onSuccess }) {
 function SpreadRow({ game }) {
   const queryClient = useQueryClient();
   const [value, setValue] = useState(
-    game.spread_home != null ? String(game.spread_home) : '',
+    game.spread_home != null ? String(game.spread_home) : "",
   );
   const [err, setErr] = useState(null);
 
@@ -332,10 +333,12 @@ function SpreadRow({ game }) {
     },
     onSuccess: () => {
       setErr(null);
-      queryClient.invalidateQueries({ queryKey: ['games', 'week', game.week_id] });
+      queryClient.invalidateQueries({
+        queryKey: ["games", "week", game.week_id],
+      });
     },
     onError: (e) => {
-      setErr(e?.response?.data?.error ?? 'unknown_error');
+      setErr(e?.response?.data?.error ?? "unknown_error");
     },
   });
 
@@ -343,15 +346,15 @@ function SpreadRow({ game }) {
     e.preventDefault();
     const n = Number(value);
     if (!Number.isFinite(n)) {
-      setErr('Spread must be a number.');
+      setErr("Spread must be a number.");
       return;
     }
     mutation.mutate();
   };
 
   const highlight = game.admin_override
-    ? 'ring-2 ring-amber-300 bg-amber-50'
-    : 'ring-1 ring-slate-200 bg-white';
+    ? "ring-2 ring-amber-300 bg-amber-50"
+    : "ring-1 ring-slate-200 bg-white";
 
   return (
     <li className={`rounded-md p-3 shadow-sm ${highlight}`}>
@@ -359,17 +362,19 @@ function SpreadRow({ game }) {
         <div className="text-sm font-semibold text-slate-900">
           {game.away_abbr} @ {game.home_abbr}
         </div>
-        <div className="text-xs text-slate-500">{formatKickoff(game.kickoff)}</div>
+        <div className="text-xs text-slate-500">
+          {formatKickoff(game.kickoff)}
+        </div>
       </div>
       <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-600">
         <span>
-          Current spread (home):{' '}
+          Current spread (home):{" "}
           <span className="font-semibold text-slate-900">
-            {game.spread_home != null ? game.spread_home : '—'}
+            {game.spread_home != null ? game.spread_home : "—"}
           </span>
         </span>
         <span>
-          Source: <span className="font-mono">{game.spread_source ?? '—'}</span>
+          Source: <span className="font-mono">{game.spread_source ?? "—"}</span>
         </span>
         {game.admin_override && (
           <span className="rounded-full bg-amber-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-900">
@@ -393,7 +398,7 @@ function SpreadRow({ game }) {
           disabled={mutation.isPending}
           className="min-h-[44px] rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {mutation.isPending ? 'Saving…' : 'Override'}
+          {mutation.isPending ? "Saving…" : "Override"}
         </button>
         {err && (
           <span className="basis-full text-xs text-red-700 sm:basis-auto">
@@ -409,14 +414,14 @@ export default function AdminPanel() {
   const queryClient = useQueryClient();
 
   const { data: season } = useQuery({
-    queryKey: ['season', 'active'],
-    queryFn: async () => (await apiClient.get('/api/seasons/active')).data,
+    queryKey: ["season", "active"],
+    queryFn: async () => (await apiClient.get("/api/seasons/active")).data,
   });
 
   const { data: weeks } = useQuery({
-    queryKey: ['weeks', 'season', season?.id],
+    queryKey: ["weeks", "season", season?.id],
     queryFn: async () => {
-      const { data } = await apiClient.get('/api/weeks', {
+      const { data } = await apiClient.get("/api/weeks", {
         params: { season_id: season.id },
       });
       return data;
@@ -449,7 +454,9 @@ export default function AdminPanel() {
     onSuccess: (data) => {
       setOddsResult(data);
       setOddsError(null);
-      queryClient.invalidateQueries({ queryKey: ['games', 'week', oddsWeekId] });
+      queryClient.invalidateQueries({
+        queryKey: ["games", "week", oddsWeekId],
+      });
     },
     onError: (e) => {
       setOddsError(e?.response?.data ?? e.message);
@@ -467,8 +474,10 @@ export default function AdminPanel() {
     onSuccess: (data) => {
       setOddsResult(data);
       setOddsError(null);
-      queryClient.invalidateQueries({ queryKey: ['games', 'week', oddsWeekId] });
-      queryClient.invalidateQueries({ queryKey: ['leaderboard'] });
+      queryClient.invalidateQueries({
+        queryKey: ["games", "week", oddsWeekId],
+      });
+      queryClient.invalidateQueries({ queryKey: ["leaderboard"] });
     },
     onError: (e) => {
       setOddsError(e?.response?.data ?? e.message);
@@ -478,14 +487,14 @@ export default function AdminPanel() {
 
   const refreshAllScoresMutation = useMutation({
     mutationFn: async () => {
-      const { data } = await apiClient.post('/api/admin/scores/refresh');
+      const { data } = await apiClient.post("/api/admin/scores/refresh");
       return data;
     },
     onSuccess: (data) => {
       setOddsResult(data);
       setOddsError(null);
-      queryClient.invalidateQueries({ queryKey: ['games'] });
-      queryClient.invalidateQueries({ queryKey: ['leaderboard'] });
+      queryClient.invalidateQueries({ queryKey: ["games"] });
+      queryClient.invalidateQueries({ queryKey: ["leaderboard"] });
     },
     onError: (e) => {
       setOddsError(e?.response?.data ?? e.message);
@@ -538,8 +547,8 @@ export default function AdminPanel() {
               className="min-h-[44px] rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {refreshOddsMutation.isPending
-                ? 'Refreshing…'
-                : 'Refresh odds for this week'}
+                ? "Refreshing…"
+                : "Refresh odds for this week"}
             </button>
             <button
               type="button"
@@ -548,8 +557,8 @@ export default function AdminPanel() {
               className="min-h-[44px] rounded-md bg-slate-700 px-4 py-2 text-sm font-medium text-white hover:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {scoreAllMutation.isPending
-                ? 'Re-grading…'
-                : 'Re-grade all final games in this week'}
+                ? "Re-grading…"
+                : "Re-grade all final games in this week"}
             </button>
           </div>
           <div className="mt-3 border-t border-slate-200 pt-3">
@@ -560,8 +569,8 @@ export default function AdminPanel() {
               className="min-h-[44px] rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {refreshAllScoresMutation.isPending
-                ? 'Refreshing…'
-                : 'Refresh all scores from API'}
+                ? "Refreshing…"
+                : "Refresh all scores from API"}
             </button>
           </div>
           <ResultPanel result={oddsResult} error={oddsError} />
@@ -581,9 +590,7 @@ export default function AdminPanel() {
               />
             </label>
           </div>
-          {scoreGames.isLoading && (
-            <LoadingState size="sm" className="mt-4" />
-          )}
+          {scoreGames.isLoading && <LoadingState size="sm" className="mt-4" />}
           {scoreGames.isError && (
             <div className="mt-4">
               <ErrorState
@@ -630,9 +637,7 @@ export default function AdminPanel() {
               />
             </label>
           </div>
-          {spreadGames.isLoading && (
-            <LoadingState size="sm" className="mt-4" />
-          )}
+          {spreadGames.isLoading && <LoadingState size="sm" className="mt-4" />}
           {spreadGames.isError && (
             <div className="mt-4">
               <ErrorState

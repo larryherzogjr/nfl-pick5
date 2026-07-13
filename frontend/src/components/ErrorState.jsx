@@ -1,13 +1,13 @@
 function extractMessage(error, fallback) {
   if (!error) return fallback;
-  if (typeof error === 'string') return error;
+  if (typeof error === "string") return error;
   const data = error?.response?.data;
   if (data) {
-    if (typeof data === 'string') return data;
-    if (typeof data.error === 'string') return data.error;
-    if (typeof data.message === 'string') return data.message;
+    if (typeof data === "string") return data;
+    if (typeof data.error === "string") return data.error;
+    if (typeof data.message === "string") return data.message;
   }
-  if (typeof error.message === 'string') return error.message;
+  if (typeof error.message === "string") return error.message;
   return fallback;
 }
 
@@ -16,23 +16,30 @@ export default function ErrorState({
   message,
   title,
   onRetry,
-  variant = 'error',
-  className = '',
+  variant = "error",
+  className = "",
 }) {
-  const isNotFound = variant === 'notFound';
-  const resolvedTitle = title ?? (isNotFound ? 'Not found' : 'Something went wrong');
+  const isNotFound = variant === "notFound";
+  const resolvedTitle =
+    title ?? (isNotFound ? "Not found" : "Something went wrong");
   const resolvedMessage =
-    message ?? extractMessage(error, isNotFound ? 'We couldn’t find what you were looking for.' : 'Please try again in a moment.');
+    message ??
+    extractMessage(
+      error,
+      isNotFound
+        ? "We couldn’t find what you were looking for."
+        : "Please try again in a moment.",
+    );
 
   const containerClass = isNotFound
-    ? 'rounded-lg bg-white p-8 text-center shadow-sm ring-1 ring-slate-200'
-    : 'rounded-md bg-red-50 p-4 text-left ring-1 ring-red-200';
+    ? "rounded-lg bg-white p-8 text-center shadow-sm ring-1 ring-slate-200"
+    : "rounded-md bg-red-50 p-4 text-left ring-1 ring-red-200";
   const titleClass = isNotFound
-    ? 'text-lg font-semibold text-slate-900'
-    : 'text-sm font-semibold text-red-800';
+    ? "text-lg font-semibold text-slate-900"
+    : "text-sm font-semibold text-red-800";
   const bodyClass = isNotFound
-    ? 'mt-2 text-sm text-slate-600'
-    : 'mt-1 text-sm text-red-700';
+    ? "mt-2 text-sm text-slate-600"
+    : "mt-1 text-sm text-red-700";
 
   return (
     <div role="alert" className={`${containerClass} ${className}`}>

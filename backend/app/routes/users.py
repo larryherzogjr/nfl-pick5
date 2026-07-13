@@ -1,10 +1,11 @@
 from collections import defaultdict
+from datetime import datetime, timezone
 
 from flask import Blueprint, g, jsonify, request
 from sqlalchemy.orm import joinedload
 
 from app import db
-from app.models import Game, Pick, Season, Week
+from app.models import Game, Pick, Season, User, Week
 from app.utils.auth_helpers import login_required
 
 users_bp = Blueprint("users", __name__, url_prefix="/api/users")
@@ -20,7 +21,9 @@ def _serialize_pick(pick: Pick) -> dict:
         "away_team": game.away_team,
         "home_team": game.home_team,
         "kickoff": game.kickoff.isoformat(),
-        "spread_home": float(game.spread_home) if game.spread_home is not None else None,
+        "spread_home": (
+            float(game.spread_home) if game.spread_home is not None else None
+        ),
         "spread_at_pick": float(pick.spread_at_pick),
         "picked_side": pick.picked_side,
         "score_home": game.score_home,
@@ -28,6 +31,40 @@ def _serialize_pick(pick: Pick) -> dict:
         "is_final": game.is_final,
         "points_awarded": pick.points_awarded,
     }
+
+
+@users_bp.get("/<uuid:user_id>/weeks/<int:week_id>/picks")
+@login_required
+def get_user_picks_for_week(user_id, week_id: int):
+    """Return a player's picks without leaking choices before kickoff."""
+    target_user = db.session.get(User, user_id)
+    if target_user is None:
+        return jsonify({"error": "user_not_found"}), 404
+
+    week = db.session.get(Week, week_id)
+    if week is None:
+        return jsonify({"error": "week_not_found"}), 404
+
+    query = (
+        Pick.query.options(joinedload(Pick.game))
+        .join(Game, Pick.game_id == Game.id)
+        .filter(Pick.user_id == target_user.id, Game.week_id == week_id)
+    )
+    if target_user.id != g.current_user.id:
+        query = query.filter(Game.kickoff <= datetime.now(timezone.utc))
+
+    picks = query.order_by(Game.kickoff.asc(), Pick.id.asc()).all()
+    return jsonify(
+        {
+            "user": {
+                "id": str(target_user.id),
+                "display_name": target_user.display_name,
+                "avatar_url": target_user.avatar_url,
+            },
+            "week_id": week.id,
+            "picks": [_serialize_pick(pick) for pick in picks],
+        }
+    )
 
 
 @users_bp.get("/me/picks")

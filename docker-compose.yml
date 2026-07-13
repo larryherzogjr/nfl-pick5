@@ -4,7 +4,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: pick5
-      POSTGRES_PASSWORD: pick5
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pick5}
       POSTGRES_DB: pick5
     ports:
       - "5432:5432"
@@ -24,7 +24,7 @@ services:
     ports:
       - "5000:5000"
     environment:
-      - DATABASE_URL=postgresql://pick5:pick5@db:5432/pick5
+      DATABASE_URL: ${DATABASE_URL:-postgresql://pick5:pick5@db:5432/pick5}
     env_file:
       - .env
     depends_on:
@@ -45,7 +45,7 @@ services:
     restart: unless-stopped
     command: python -m app.scheduler.run
     environment:
-      - DATABASE_URL=postgresql://pick5:pick5@db:5432/pick5
+      DATABASE_URL: ${DATABASE_URL:-postgresql://pick5:pick5@db:5432/pick5}
     env_file:
       - .env
     depends_on:

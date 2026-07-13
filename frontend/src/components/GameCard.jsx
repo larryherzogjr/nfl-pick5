@@ -1,28 +1,30 @@
-import CountdownTimer from './CountdownTimer';
+import CountdownTimer from "./CountdownTimer";
 
 function formatKickoff(iso) {
   return new Intl.DateTimeFormat(undefined, {
-    weekday: 'short',
-    hour: 'numeric',
-    minute: '2-digit',
+    weekday: "short",
+    hour: "numeric",
+    minute: "2-digit",
   }).format(new Date(iso));
 }
 
 function formatSpread(spread) {
-  if (spread === null || spread === undefined) return '—';
-  if (spread === 0) return 'PK';
+  if (spread === null || spread === undefined) return "—";
+  if (spread === 0) return "PK";
   return spread > 0 ? `+${spread}` : `${spread}`;
 }
 
 function pointsBadge(points) {
-  if (points === 2) return { text: '✓ 2 pts', className: 'bg-green-100 text-green-800' };
-  if (points === 1) return { text: '✓ 1 pt', className: 'bg-green-100 text-green-800' };
-  return { text: '✗ 0 pts', className: 'bg-red-100 text-red-700' };
+  if (points === 2)
+    return { text: "✓ 2 pts", className: "bg-green-100 text-green-800" };
+  if (points === 1)
+    return { text: "✓ 1 pt", className: "bg-green-100 text-green-800" };
+  return { text: "✗ 0 pts", className: "bg-red-100 text-red-700" };
 }
 
 function buttonClass(selected, locked) {
   const base =
-    'flex-1 min-h-[44px] rounded-md border px-3 py-3 text-sm font-medium transition select-none';
+    "flex-1 min-h-[44px] rounded-md border px-3 py-3 text-sm font-medium transition select-none";
   if (locked) {
     if (selected) {
       return `${base} cursor-not-allowed border-slate-300 bg-slate-200 text-slate-500`;
@@ -35,7 +37,12 @@ function buttonClass(selected, locked) {
   return `${base} border-slate-300 bg-white text-slate-700 hover:bg-slate-50 active:bg-slate-100`;
 }
 
-export default function GameCard({ game, currentPick, selectedSide, onPickChange }) {
+export default function GameCard({
+  game,
+  currentPick,
+  selectedSide,
+  onPickChange,
+}) {
   const kickoffMs = new Date(game.kickoff).getTime();
   const locked = game.is_locked || Date.now() >= kickoffMs;
   const spread = game.spread_home;
@@ -43,11 +50,11 @@ export default function GameCard({ game, currentPick, selectedSide, onPickChange
     spread !== null && spread !== undefined && Number.isInteger(spread);
 
   const buttons = [
-    { side: 'away', label: 'Away' },
-    { side: 'home', label: 'Home' },
+    { side: "away", label: "Away" },
+    { side: "home", label: "Home" },
   ];
   if (isWholeSpread) {
-    buttons.push({ side: 'push', label: 'Push (2x)' });
+    buttons.push({ side: "push", label: "Push (2x)" });
   }
 
   const hasGrade =
@@ -61,8 +68,8 @@ export default function GameCard({ game, currentPick, selectedSide, onPickChange
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="text-base font-semibold text-slate-900">
-            <span className="text-slate-500">{game.away_abbr}</span>{' '}
-            <span className="font-normal text-slate-400">@</span>{' '}
+            <span className="text-slate-500">{game.away_abbr}</span>{" "}
+            <span className="font-normal text-slate-400">@</span>{" "}
             <span>{game.home_abbr}</span>
           </div>
           <div className="mt-0.5 truncate text-xs text-slate-500">

@@ -14,7 +14,7 @@ This document serves as the authoritative design specification for the NFL Pick 
 
 ### Key Requirements
 
-- Users authenticate via Google or Meta (Facebook) OAuth 2.0
+- Users authenticate via Google OAuth 2.0
 - Each NFL week, users pick exactly 5 games against the published spread
 - On whole-number spreads, users may pick **push** as a third option, earning **2 points** if the game lands exactly on the spread
 - Picks for a given game lock when that game's kickoff time is reached
@@ -33,7 +33,7 @@ This document serves as the authoritative design specification for the NFL Pick 
 | Backend       | Python / Flask                      | Proven stack; aligns with developer experience  |
 | Database      | PostgreSQL                          | Relational integrity for picks, scores, users   |
 | ORM           | SQLAlchemy + Flask-Migrate (Alembic)| Migration management, model-first development   |
-| Auth          | Authlib (OAuth 2.0 client)          | Supports Google + Meta OAuth; well-maintained   |
+| Auth          | Authlib (OAuth 2.0 client)          | Google OpenID Connect client                    |
 | Frontend      | React (Vite)                        | Modern SPA; fast dev iteration                  |
 | Styling       | Tailwind CSS                        | Utility-first; rapid UI development             |
 | HTTP Client   | Axios                               | Promise-based; interceptors for auth tokens     |
@@ -59,7 +59,7 @@ User 1──M Pick M──1 Game M──1 Week M──1 Season
 | email           | VARCHAR(255) | Unique; from OAuth profile                 |
 | display_name    | VARCHAR(100) | From OAuth profile; editable               |
 | avatar_url      | TEXT         | From OAuth profile                         |
-| oauth_provider  | VARCHAR(20)  | 'google' or 'meta'                         |
+| oauth_provider  | VARCHAR(20)  | `'google'` for active accounts; legacy values may remain |
 | oauth_subject   | VARCHAR(255) | Provider's unique user ID                  |
 | is_admin        | BOOLEAN      | Default false                              |
 | created_at      | TIMESTAMPTZ  | Auto-set                                   |
@@ -232,9 +232,7 @@ All endpoints return JSON. Auth-required endpoints expect a session cookie or Be
 | Method | Path                  | Description                    |
 |--------|-----------------------|--------------------------------|
 | GET    | /auth/login/google    | Redirect to Google OAuth       |
-| GET    | /auth/login/meta      | Redirect to Meta OAuth         |
 | GET    | /auth/callback/google | Google OAuth callback          |
-| GET    | /auth/callback/meta   | Meta OAuth callback            |
 | GET    | /auth/me              | Return current user profile    |
 | POST   | /auth/logout          | Clear session                  |
 
@@ -253,6 +251,7 @@ All endpoints return JSON. Auth-required endpoints expect a session cookie or Be
 |--------|-------------------------------|------------------------------------------|
 | GET    | /api/weeks/:id/picks          | Get current user's picks for a week      |
 | POST   | /api/weeks/:id/picks          | Submit/update picks (array of up to 5)   |
+| GET    | /api/users/:user_id/weeks/:id/picks | Get a player's picks, filtered by kickoff visibility |
 
 **POST body:**
 ```json
@@ -348,9 +347,10 @@ The spread override endpoint must display a warning that the change affects only
 - **Endpoint:** `GET https://api.the-odds-api.com/v4/sports/americanfootball_nfl/scores`
 - **Params:** `daysFrom=3`
 - Poll every 30 minutes **only during active game windows** (roughly Thu 8–11pm, Sun 1–11pm, Mon 8–11pm Eastern Time)
+- Run a daily 06:00 ET catch-up so unusual Wednesday/Friday/Saturday games and late finishes are finalized without waiting for the next normal game window
 - When a game is marked complete, update `score_home`, `score_away`, set `is_final = True`, and trigger `score_game()`
 
-**Monthly request budget estimate:** ~30 spread calls + ~40 score calls = ~70/month, comfortably under the 500/month free-tier limit.
+**Monthly request budget estimate:** roughly 60–70 spread calls plus 180–190 score calls during a four-week month, below the 500/month free-tier limit.
 
 ---
 
@@ -365,11 +365,11 @@ The spread override endpoint must display a warning that the change affects only
 5. Upsert `users` row by `(oauth_provider='google', oauth_subject=sub)`
 6. Set Flask session with `user_id`
 
-### 8.2 Meta (Facebook) OAuth 2.0
+If an email already belongs to another OAuth identity, do not auto-link it.
+Redirect to the login screen with a clear instruction to use the Google account
+that originally created it.
 
-Same flow via Meta's Graph API. Scopes: `email`, `public_profile`.
-
-### 8.3 Session Management
+### 8.2 Session Management
 
 - Use Flask server-side sessions (Flask-Session with PostgreSQL backend)
 - Session cookie: `HttpOnly`, `Secure`, `SameSite=Lax`
@@ -385,7 +385,7 @@ Same flow via Meta's Graph API. Scopes: `email`, `public_profile`.
 | Route               | Component           | Description                          |
 |----------------------|---------------------|--------------------------------------|
 | `/`                  | `<Home />`          | Redirect to current week picks       |
-| `/login`             | `<Login />`         | Google/Meta sign-in buttons          |
+| `/login`             | `<Login />`         | Google sign-in                       |
 | `/week/:weekId`      | `<WeekView />`      | Game cards with pick toggles         |
 | `/leaderboard`       | `<Leaderboard />`   | Season standings table               |
 | `/profile`           | `<Profile />`       | User info, pick history              |
@@ -486,15 +486,12 @@ nfl-pick5/
 
 # Flask
 FLASK_SECRET_KEY=change-me-to-random-string
+POSTGRES_PASSWORD=pick5
 DATABASE_URL=postgresql://pick5:pick5@db:5432/pick5
 
 # OAuth — Google
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
-
-# OAuth — Meta
-META_APP_ID=
-META_APP_SECRET=
 
 # The Odds API
 ODDS_API_KEY=
@@ -515,7 +512,7 @@ services:
     image: postgres:16
     environment:
       POSTGRES_USER: pick5
-      POSTGRES_PASSWORD: pick5
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pick5}
       POSTGRES_DB: pick5
     ports:
       - "5432:5432"
@@ -528,7 +525,7 @@ services:
     ports:
       - "5000:5000"
     environment:
-      - DATABASE_URL=postgresql://pick5:pick5@db:5432/pick5
+      DATABASE_URL: ${DATABASE_URL:-postgresql://pick5:pick5@db:5432/pick5}
     env_file:
       - .env
     depends_on:
@@ -540,7 +537,7 @@ services:
     build: ./backend
     command: python -m app.scheduler.run
     environment:
-      - DATABASE_URL=postgresql://pick5:pick5@db:5432/pick5
+      DATABASE_URL: ${DATABASE_URL:-postgresql://pick5:pick5@db:5432/pick5}
     env_file:
       - .env
     depends_on:
@@ -576,13 +573,13 @@ This application is designed to run on a Docker-capable host. For the developer'
 
 - Serve Flask behind Gunicorn (`gunicorn -w 4 wsgi:app`).
 - Put Nginx in front as reverse proxy: TLS termination, static file serving for the React build, request forwarding for `/api/*`, `/auth/*`, and `/avatars/*` to the backend on 127.0.0.1:5000.
-- Flask **MUST** wrap `app.wsgi_app` with `werkzeug.middleware.proxy_fix.ProxyFix(app.wsgi_app, x_proto=1, x_host=1)` in the app factory. Without this, `url_for(_external=True)` generates `http://` URLs because Flask sees the proxied request as plain HTTP from 127.0.0.1, which breaks OAuth redirect URI matching with Google and Meta. Nginx already sends `X-Forwarded-Proto: https` — ProxyFix is what makes Flask trust it.
+- Flask **MUST** wrap `app.wsgi_app` with `werkzeug.middleware.proxy_fix.ProxyFix(app.wsgi_app, x_proto=1, x_host=1)` in the app factory. Without this, `url_for(_external=True)` generates `http://` URLs because Flask sees the proxied request as plain HTTP from 127.0.0.1, which breaks Google OAuth redirect URI matching. Nginx already sends `X-Forwarded-Proto: https` — ProxyFix is what makes Flask trust it.
 - React production build: use the multi-stage frontend Dockerfile's `dist` target with BuildKit `--output type=local` to export the bundle to the host filesystem. No Node.js needs to be installed on the production server.
 - Bare-metal hosts (vs. NAT-protected VMs): Docker port bindings MUST use `127.0.0.1:` prefixes in production compose overlays, because Docker bypasses UFW iptables. Binding to `0.0.0.0:` would publicly expose the backend and database regardless of firewall rules.
 - The Nginx `location` for `/avatars/` MUST use the `^~` modifier (`location ^~ /avatars/ { proxy_pass http://127.0.0.1:5000; ... }`). Without it, the generic regex `location` for static asset extensions (`.jpg`, `.png`, etc.) matches first and tries to serve avatars from the React dist directory, returning broken images.
 - Persistent user data lives at `/srv/nfl-pick5/data/` on the host, bind-mounted into the backend container at `/app/data/`. Currently `data/avatars/` is the only directory used; create it explicitly as the `pick5` user before the first `docker compose up` so Docker doesn't auto-create it as root.
 - Backups must cover both PostgreSQL (via `pg_dump`) and the avatar files (via `tar` of `/srv/nfl-pick5/data/avatars`). 14-day local retention; rsync to offsite storage optional but recommended.
-- OAuth redirect URIs must be updated in Google Cloud Console and Meta Developer Console to match the production domain.
+- The OAuth redirect URI must be updated in Google Cloud Console to match the production domain.
 - Two-account model: a runtime user (`pick5`) owns the app directory and runs Docker; an admin user (`lherzog`) is the only SSH-reachable account. The runtime user has no SSH access (`sshd_config` AllowUsers restricts to the admin user). All operational commands run via `sudo -iu pick5` from an admin session.
 
 ### Scheduling and Time-Range Caveats
@@ -604,7 +601,7 @@ When implementing this project, follow this sequence:
 
 1. **Scaffold project structure** — Create directories (including `scheduler/` package and `utils/teams.py`), `requirements.txt`, `package.json`, Dockerfiles, `docker-compose.yml`
 2. **Database models + migrations** — All SQLAlchemy models. Note: `picks.picked_side` enum includes `'push'`, plus `spread_at_pick` (required) and `points_awarded` (nullable).
-3. **Auth flow** — Google OAuth end-to-end (login → callback → session → /auth/me). Add Meta after Google works.
+3. **Auth flow** — Google OAuth end-to-end (login → callback → session → /auth/me).
 4. **Odds service** — Fetch from The Odds API, upsert games using `utils/teams.py` for abbreviation mapping, store spreads. Test with a manual trigger endpoint.
 5. **Weeks & games API** — CRUD-read endpoints for the frontend to consume
 6. **Picks API** — Submit/update/retrieve with lock validation, spread snapshotting, and push-on-whole-spreads validation

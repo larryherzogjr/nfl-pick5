@@ -24,9 +24,6 @@ class Config:
 
     GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
     GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET")
-    META_APP_ID = os.environ.get("META_APP_ID")
-    META_APP_SECRET = os.environ.get("META_APP_SECRET")
-
     ODDS_API_KEY = os.environ.get("ODDS_API_KEY")
     ODDS_PREFERRED_BOOK = os.environ.get("ODDS_PREFERRED_BOOK", "fanduel")
 
@@ -36,7 +33,6 @@ class Config:
     SESSION_SQLALCHEMY_TABLE = "flask_sessions"
     SESSION_PERMANENT = True
     PERMANENT_SESSION_LIFETIME = timedelta(days=30)
-    SESSION_USE_SIGNER = True
     SESSION_COOKIE_NAME = "pick5_session"
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"

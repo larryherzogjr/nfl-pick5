@@ -6,7 +6,7 @@ Authoritative spec: **`DESIGN.md`** in this directory. Read it before making any
 - Backend: Python 3.12 + Flask + SQLAlchemy + APScheduler
 - Database: PostgreSQL 16
 - Frontend: React (Vite) + Tailwind CSS
-- Auth: Authlib (Google + Meta OAuth 2.0)
+- Auth: Authlib (Google OAuth 2.0)
 - Deployment: Docker Compose (4 services: db, backend, scheduler, frontend)
 
 ## Build order
@@ -17,6 +17,8 @@ Follow DESIGN.md §14 strictly. Do not skip ahead — auth before picks, picks b
 - Frontend: ESLint + Prettier
 - All timestamps are TIMESTAMPTZ — never naive datetimes
 - Server is the authority for pick-lock; client-side checks are UX only
+- Pick submissions replace all unlocked picks for the week; locked picks are preserved
+- Other users' picks must never be exposed before the corresponding kickoff
 - `picks.spread_at_pick` is captured server-side at submission, never re-derived
 - The scheduler module (`app/scheduler/`) MUST NOT be imported from the Flask app factory — it runs standalone via `python -m app.scheduler.run` in its own container
 
@@ -43,7 +45,6 @@ This produces `./frontend/dist/` for Nginx to serve.
 ## Deferred env vars
 Code may reference these but they're not yet provisioned:
 - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
-- `META_APP_ID`, `META_APP_SECRET`
 - `ODDS_API_KEY`
 
 ## Local dev setup in worktrees
@@ -71,6 +72,7 @@ The codebase deploys to a Hetzner bare-metal Ubuntu host fronted by host-level N
 - **`seed-weeks` does not activate seasons.** It creates the Season row with `is_active = false` so future-year seedings don't accidentally overwrite the current active season. An explicit `UPDATE seasons SET is_active = true WHERE year = <year>` is required after seeding.
 
 - **Week 1 date range may need manual adjustment.** `seed-weeks` assumes Thursday-after-Labor-Day through the following Monday. NFL occasionally schedules Wednesday openers or international Saturday games that fall outside this range. After seeding, glance at the published schedule and `UPDATE weeks SET start_date = ...` if needed; otherwise odds refresh will silently skip out-of-range games with `skipped_no_week`.
+- **Score refresh includes a daily 06:00 ET catch-up.** Keep this job when adjusting the scheduler; it covers unusual Friday/Saturday games and late Monday finishes.
 
 ## Production deployment knowledge
 

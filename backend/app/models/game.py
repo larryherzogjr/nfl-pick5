@@ -9,7 +9,10 @@ class Game(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     week_id = db.Column(
-        db.Integer, db.ForeignKey("weeks.id", ondelete="CASCADE"), nullable=False, index=True
+        db.Integer,
+        db.ForeignKey("weeks.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     external_id = db.Column(db.String(100), nullable=False)
     home_team = db.Column(db.String(50), nullable=False)
@@ -22,7 +25,9 @@ class Game(db.Model):
     spread_updated_at = db.Column(db.DateTime(timezone=True))
     score_home = db.Column(db.Integer)
     score_away = db.Column(db.Integer)
-    is_final = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+    is_final = db.Column(
+        db.Boolean, nullable=False, default=False, server_default=db.false()
+    )
     admin_override = db.Column(
         db.Boolean, nullable=False, default=False, server_default=db.false()
     )

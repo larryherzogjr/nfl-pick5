@@ -29,7 +29,10 @@ def seed_weeks(year: int) -> None:
     first_thursday = _labor_day(year) + timedelta(days=3)
 
     existing_numbers = {
-        wn for (wn,) in db.session.query(Week.week_number).filter_by(season_id=season.id).all()
+        wn
+        for (wn,) in db.session.query(Week.week_number)
+        .filter_by(season_id=season.id)
+        .all()
     }
 
     created = 0
@@ -52,4 +55,6 @@ def seed_weeks(year: int) -> None:
         created += 1
 
     db.session.commit()
-    click.echo(f"Seeded {created} new weeks for season {label} ({skipped} already existed)")
+    click.echo(
+        f"Seeded {created} new weeks for season {label} ({skipped} already existed)"
+    )

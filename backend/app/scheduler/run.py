@@ -28,6 +28,7 @@ def build_scheduler(app: Flask) -> BlockingScheduler:
 
     * Odds — non-game days (Tue/Wed/Fri/Sat): daily at 06:00
     * Odds — game days (Thu/Sun/Mon): every 4 hours, 08:00–22:00 (08, 12, 16, 20)
+    * Scores — daily catch-up at 06:00 (covers unusual game days and late finishes)
     * Scores — Thu 20:00–23:30, every 30 min
     * Scores — Sun 13:00–23:30, every 30 min
     * Scores — Mon 20:00–23:30, every 30 min
@@ -52,6 +53,14 @@ def build_scheduler(app: Flask) -> BlockingScheduler:
         kwargs={"app": app},
         id="refresh_odds_game_day",
         name="refresh_odds (game days every 4h, 08:00–22:00 ET)",
+    )
+
+    scheduler.add_job(
+        refresh_scores_job,
+        trigger=CronTrigger(hour=6, minute=0, timezone=NFL_TZ),
+        kwargs={"app": app},
+        id="refresh_scores_daily_catchup",
+        name="refresh_scores (daily catch-up @ 06:00 ET)",
     )
 
     scheduler.add_job(

@@ -1,24 +1,20 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import apiClient from '../api/client';
-import TopNav from '../components/TopNav';
-import GameCard from '../components/GameCard';
-import PickBar from '../components/PickBar';
-import LoadingState from '../components/LoadingState';
-import ErrorState from '../components/ErrorState';
-
-// Known limitation: POST /api/weeks/:id/picks does not support deletion.
-// Deselecting a previously-submitted pick and submitting will NOT remove it —
-// the request simply omits that game, and the persisted pick is preserved.
-// To remove a pick, the user must swap it to a different side. A DELETE
-// endpoint can be added later.
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useParams } from "react-router-dom";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import apiClient from "../api/client";
+import TopNav from "../components/TopNav";
+import GameCard from "../components/GameCard";
+import PickBar from "../components/PickBar";
+import LoadingState from "../components/LoadingState";
+import ErrorState from "../components/ErrorState";
 
 const PICK_ERROR_MESSAGES = {
-  game_not_in_week: 'Game is not part of this week.',
-  invalid_picked_side: 'Invalid pick selection.',
-  push_requires_whole_spread: 'Push picks require a whole-number spread.',
-  invalid_pick_item: 'Malformed pick entry.',
+  game_not_in_week: "Game is not part of this week.",
+  invalid_picked_side: "Invalid pick selection.",
+  push_requires_whole_spread: "Push picks require a whole-number spread.",
+  spread_unavailable: "A spread is not available for this game yet.",
+  duplicate_game_id: "Game was submitted more than once.",
+  invalid_pick_item: "Malformed pick entry.",
 };
 
 export default function WeekView() {
@@ -27,7 +23,7 @@ export default function WeekView() {
   const weekIdValid = Number.isFinite(weekIdNum);
   const queryClient = useQueryClient();
 
-  const picksQueryKey = ['picks', 'week', weekIdNum];
+  const picksQueryKey = ["picks", "week", weekIdNum];
 
   const {
     data: games,
@@ -36,7 +32,7 @@ export default function WeekView() {
     error: gamesError,
     refetch: refetchGames,
   } = useQuery({
-    queryKey: ['games', 'week', weekIdNum],
+    queryKey: ["games", "week", weekIdNum],
     queryFn: async () => {
       const { data } = await apiClient.get(`/api/weeks/${weekIdNum}/games`);
       return data;
@@ -68,14 +64,14 @@ export default function WeekView() {
   });
 
   const { data: season } = useQuery({
-    queryKey: ['season', 'active'],
-    queryFn: async () => (await apiClient.get('/api/seasons/active')).data,
+    queryKey: ["season", "active"],
+    queryFn: async () => (await apiClient.get("/api/seasons/active")).data,
   });
 
   const { data: weeks } = useQuery({
-    queryKey: ['weeks', 'season', season?.id],
+    queryKey: ["weeks", "season", season?.id],
     queryFn: async () => {
-      const { data } = await apiClient.get('/api/weeks', {
+      const { data } = await apiClient.get("/api/weeks", {
         params: { season_id: season.id },
       });
       return data;
@@ -169,7 +165,7 @@ export default function WeekView() {
       if (status === 400 && Array.isArray(errs)) {
         setSubmitErrors(errs);
       } else {
-        setSubmitErrors([{ game_id: null, error: 'unknown_error' }]);
+        setSubmitErrors([{ game_id: null, error: "unknown_error" }]);
       }
     },
   });
@@ -194,11 +190,11 @@ export default function WeekView() {
   };
 
   const formatErrorMessage = (e) => {
-    if (e.error === 'weekly_limit_exceeded') {
-      return 'You may only pick 5 games per week.';
+    if (e.error === "weekly_limit_exceeded") {
+      return "You may only pick 5 games per week.";
     }
-    if (e.error === 'malformed_body') {
-      return 'Request was malformed. Please refresh and try again.';
+    if (e.error === "malformed_body") {
+      return "Request was malformed. Please refresh and try again.";
     }
     const base = PICK_ERROR_MESSAGES[e.error] ?? `Error: ${e.error}`;
     const game = e.game_id != null ? gamesById[e.game_id] : null;
@@ -209,10 +205,10 @@ export default function WeekView() {
   };
 
   const weeklyLimitError = submitErrors.find(
-    (e) => e.error === 'weekly_limit_exceeded',
+    (e) => e.error === "weekly_limit_exceeded",
   );
   const otherErrors = submitErrors.filter(
-    (e) => e.error !== 'weekly_limit_exceeded',
+    (e) => e.error !== "weekly_limit_exceeded",
   );
 
   return (
@@ -259,42 +255,53 @@ export default function WeekView() {
           />
         )}
 
-        {weekIdValid && gamesIsError && gamesError?.response?.status === 404 && (
-          <ErrorState
-            variant="notFound"
-            title="Week not found"
-            message="We couldn’t find this week. It may not be scheduled yet."
-          />
-        )}
+        {weekIdValid &&
+          gamesIsError &&
+          gamesError?.response?.status === 404 && (
+            <ErrorState
+              variant="notFound"
+              title="Week not found"
+              message="We couldn’t find this week. It may not be scheduled yet."
+            />
+          )}
 
-        {weekIdValid && gamesIsError && gamesError?.response?.status !== 404 && (
-          <ErrorState
-            error={gamesError}
-            message="Failed to load games for this week."
-            onRetry={refetchGames}
-          />
-        )}
+        {weekIdValid &&
+          gamesIsError &&
+          gamesError?.response?.status !== 404 && (
+            <ErrorState
+              error={gamesError}
+              message="Failed to load games for this week."
+              onRetry={refetchGames}
+            />
+          )}
 
-        {weekIdValid && !gamesIsError && picksIsError && picksError?.response?.status !== 404 && (
-          <ErrorState
-            error={picksError}
-            message="Failed to load your picks."
-            onRetry={refetchPicks}
-            className="mt-3"
-          />
-        )}
+        {weekIdValid &&
+          !gamesIsError &&
+          picksIsError &&
+          picksError?.response?.status !== 404 && (
+            <ErrorState
+              error={picksError}
+              message="Failed to load your picks."
+              onRetry={refetchPicks}
+              className="mt-3"
+            />
+          )}
 
         {weekIdValid && !gamesIsError && (gamesLoading || picksLoading) && (
           <LoadingState label="Loading games…" />
         )}
 
-        {weekIdValid && !gamesLoading && !gamesIsError && games && games.length === 0 && (
-          <ErrorState
-            variant="notFound"
-            title="No games scheduled"
-            message="No games scheduled for this week yet. Check back once lines are posted."
-          />
-        )}
+        {weekIdValid &&
+          !gamesLoading &&
+          !gamesIsError &&
+          games &&
+          games.length === 0 && (
+            <ErrorState
+              variant="notFound"
+              title="No games scheduled"
+              message="No games scheduled for this week yet. Check back once lines are posted."
+            />
+          )}
 
         {weekIdValid && games && games.length > 0 && (
           <div className="space-y-3">

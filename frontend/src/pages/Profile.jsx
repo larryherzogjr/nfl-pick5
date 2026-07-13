@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import apiClient from '../api/client';
-import { useAuth } from '../context/AuthContext';
-import TopNav from '../components/TopNav';
-import LoadingState from '../components/LoadingState';
-import ErrorState from '../components/ErrorState';
+import { useEffect, useRef, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import apiClient from "../api/client";
+import { useAuth } from "../context/AuthContext";
+import TopNav from "../components/TopNav";
+import LoadingState from "../components/LoadingState";
+import ErrorState from "../components/ErrorState";
 
 const MAX_DISPLAY_NAME_LENGTH = 100;
 const MAX_AVATAR_SIZE = 5 * 1024 * 1024;
@@ -12,19 +12,19 @@ const MAX_AVATAR_SIZE = 5 * 1024 * 1024;
 const TOTAL_WEEKS = 18;
 
 const AVATAR_ERROR_MESSAGES = {
-  file_too_large: 'File is too large (max 5 MB)',
-  invalid_type: 'Please choose a JPEG, PNG, WebP, or GIF',
+  file_too_large: "File is too large (max 5 MB)",
+  invalid_type: "Please choose a JPEG, PNG, WebP, or GIF",
   invalid_image: "That file doesn't look like a valid image",
-  no_file: 'No file selected',
-  upload_failed: 'Upload failed. Try again.',
+  no_file: "No file selected",
+  upload_failed: "Upload failed. Try again.",
 };
 
 function getInitials(name) {
-  if (!name) return '?';
+  if (!name) return "?";
   const parts = name.trim().split(/\s+/);
-  const first = parts[0]?.[0] ?? '';
-  const last = parts.length > 1 ? parts[parts.length - 1][0] : '';
-  return (first + last).toUpperCase() || '?';
+  const first = parts[0]?.[0] ?? "";
+  const last = parts.length > 1 ? parts[parts.length - 1][0] : "";
+  return (first + last).toUpperCase() || "?";
 }
 
 function formatMemberSince(iso) {
@@ -33,9 +33,9 @@ function formatMemberSince(iso) {
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return null;
     return d.toLocaleDateString(undefined, {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
+      year: "numeric",
+      month: "long",
+      day: "numeric",
     });
   } catch {
     return null;
@@ -43,17 +43,10 @@ function formatMemberSince(iso) {
 }
 
 function ProviderPill({ provider }) {
-  if (!provider) return null;
-  const label =
-    provider === 'google'
-      ? 'Signed in with Google'
-      : provider === 'meta'
-        ? 'Signed in with Meta'
-        : null;
-  if (!label) return null;
+  if (provider !== "google") return null;
   return (
     <span className="mt-2 inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700 ring-1 ring-slate-200">
-      {label}
+      Signed in with Google
     </span>
   );
 }
@@ -84,9 +77,9 @@ function AvatarUploader() {
   const mutation = useMutation({
     mutationFn: async (file) => {
       const formData = new FormData();
-      formData.append('file', file);
-      const { data } = await apiClient.post('/auth/me/avatar', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
+      formData.append("file", file);
+      const { data } = await apiClient.post("/auth/me/avatar", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
         onUploadProgress: (e) => {
           if (e.total) {
             setProgress(Math.round((e.loaded * 100) / e.total));
@@ -96,24 +89,24 @@ function AvatarUploader() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
+      queryClient.invalidateQueries({ queryKey: ["auth", "me"] });
       setProgress(0);
       setError(null);
     },
     onError: (err) => {
       const code = err.response?.data?.error;
-      setError(code || 'upload_failed');
+      setError(code || "upload_failed");
       setProgress(0);
     },
   });
 
   const onChange = (e) => {
     const file = e.target.files?.[0];
-    e.target.value = '';
+    e.target.value = "";
     if (!file) return;
     setError(null);
     if (file.size > MAX_AVATAR_SIZE) {
-      setError('file_too_large');
+      setError("file_too_large");
       return;
     }
     mutation.mutate(file);
@@ -161,7 +154,7 @@ function AvatarUploader() {
 function DisplayNameEditor({ user, onDone }) {
   const queryClient = useQueryClient();
   const inputRef = useRef(null);
-  const [value, setValue] = useState(user.display_name ?? '');
+  const [value, setValue] = useState(user.display_name ?? "");
   const [errorMessage, setErrorMessage] = useState(null);
 
   useEffect(() => {
@@ -171,20 +164,20 @@ function DisplayNameEditor({ user, onDone }) {
 
   const trimmed = value.trim();
   const isEmpty = trimmed.length === 0;
-  const isUnchanged = trimmed === (user.display_name ?? '').trim();
+  const isUnchanged = trimmed === (user.display_name ?? "").trim();
   const isTooLong = trimmed.length > MAX_DISPLAY_NAME_LENGTH;
   const canSave = !isEmpty && !isUnchanged && !isTooLong;
 
   const mutation = useMutation({
     mutationFn: async () => {
-      const { data } = await apiClient.patch('/auth/me', {
+      const { data } = await apiClient.patch("/auth/me", {
         display_name: trimmed,
       });
       return data;
     },
     onSuccess: () => {
       setErrorMessage(null);
-      queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
+      queryClient.invalidateQueries({ queryKey: ["auth", "me"] });
       onDone();
     },
     onError: () => {
@@ -199,15 +192,15 @@ function DisplayNameEditor({ user, onDone }) {
 
   const cancel = () => {
     if (mutation.isPending) return;
-    setValue(user.display_name ?? '');
+    setValue(user.display_name ?? "");
     onDone();
   };
 
   const onKeyDown = (e) => {
-    if (e.key === 'Enter') {
+    if (e.key === "Enter") {
       e.preventDefault();
       submit();
-    } else if (e.key === 'Escape') {
+    } else if (e.key === "Escape") {
       e.preventDefault();
       cancel();
     }
@@ -233,7 +226,7 @@ function DisplayNameEditor({ user, onDone }) {
           disabled={!canSave || mutation.isPending}
           className="rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {mutation.isPending ? 'Saving…' : 'Save'}
+          {mutation.isPending ? "Saving…" : "Save"}
         </button>
         <button
           type="button"
@@ -252,24 +245,22 @@ function DisplayNameEditor({ user, onDone }) {
 }
 
 function providerDisplayName(provider) {
-  if (provider === 'google') return 'Google';
-  if (provider === 'meta') return 'Meta';
-  return provider ?? '';
+  if (provider === "google") return "Google";
+  return "your original provider";
 }
 
 function ResetToOauthLink({ user }) {
   const queryClient = useQueryClient();
   const mutation = useMutation({
     mutationFn: async () => {
-      const { data } = await apiClient.post('/auth/me/reset-to-oauth');
+      const { data } = await apiClient.post("/auth/me/reset-to-oauth");
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
+      queryClient.invalidateQueries({ queryKey: ["auth", "me"] });
     },
     onError: (err) => {
-      // eslint-disable-next-line no-console
-      console.error('Reset-to-OAuth failed', err);
+      console.error("Reset-to-OAuth failed", err);
     },
   });
 
@@ -289,7 +280,7 @@ function ResetToOauthLink({ user }) {
       disabled={mutation.isPending}
       className="text-xs font-medium text-slate-500 hover:text-slate-900 hover:underline focus:outline-none focus:ring-2 focus:ring-slate-300 disabled:cursor-not-allowed disabled:opacity-60"
     >
-      {mutation.isPending ? 'Resetting…' : 'Reset to OAuth info'}
+      {mutation.isPending ? "Resetting…" : "Reset to OAuth info"}
     </button>
   );
 }
@@ -309,10 +300,7 @@ function IdentityCard({ user }) {
         </div>
         <div className="min-w-0 flex-1">
           {isEditing ? (
-            <DisplayNameEditor
-              user={user}
-              onDone={() => setIsEditing(false)}
-            />
+            <DisplayNameEditor user={user} onDone={() => setIsEditing(false)} />
           ) : (
             <div className="flex items-start gap-3">
               <h1 className="truncate text-2xl font-bold text-slate-900">
@@ -358,15 +346,15 @@ function StatTile({ label, value }) {
 
 function weeklyCellClass(points) {
   if (points == null) {
-    return 'bg-slate-50 text-slate-300 ring-slate-200';
+    return "bg-slate-50 text-slate-300 ring-slate-200";
   }
   if (points >= 5) {
-    return 'bg-emerald-100 text-emerald-900 ring-emerald-300';
+    return "bg-emerald-100 text-emerald-900 ring-emerald-300";
   }
   if (points === 0) {
-    return 'bg-red-50 text-red-700 ring-red-200';
+    return "bg-red-50 text-red-700 ring-red-200";
   }
-  return 'bg-white text-slate-800 ring-slate-200';
+  return "bg-white text-slate-800 ring-slate-200";
 }
 
 function WeeklyStrip({ breakdown }) {
@@ -399,7 +387,7 @@ function WeeklyStrip({ breakdown }) {
               W{c.week}
             </span>
             <span className="mt-0.5 font-semibold">
-              {c.points == null ? '—' : c.points}
+              {c.points == null ? "—" : c.points}
             </span>
           </div>
         ))}
@@ -409,18 +397,18 @@ function WeeklyStrip({ breakdown }) {
 }
 
 function formatSpreadValue(spread) {
-  if (spread === 0) return 'PK';
+  if (spread === 0) return "PK";
   if (spread > 0) return `+${spread}`;
   return `${spread}`;
 }
 
 function formatLockedSpread(pick) {
   const spread = pick.spread_at_pick;
-  if (spread === null || spread === undefined) return '—';
-  if (pick.picked_side === 'push') {
+  if (spread === null || spread === undefined) return "—";
+  if (pick.picked_side === "push") {
     return `Push ${formatSpreadValue(spread)}`;
   }
-  if (pick.picked_side === 'home') {
+  if (pick.picked_side === "home") {
     return `${pick.home_abbr} ${formatSpreadValue(spread)}`;
   }
   const awaySpread = spread === 0 ? 0 : -spread;
@@ -430,11 +418,11 @@ function formatLockedSpread(pick) {
 function formatKickoffShort(iso) {
   try {
     return new Intl.DateTimeFormat(undefined, {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
     }).format(new Date(iso));
   } catch {
     return iso;
@@ -443,9 +431,9 @@ function formatKickoffShort(iso) {
 
 function PickedSideBadge({ pick }) {
   let label;
-  if (pick.picked_side === 'home') label = pick.home_abbr;
-  else if (pick.picked_side === 'away') label = pick.away_abbr;
-  else label = 'Push';
+  if (pick.picked_side === "home") label = pick.home_abbr;
+  else if (pick.picked_side === "away") label = pick.away_abbr;
+  else label = "Push";
   return (
     <span className="inline-flex items-center rounded-md bg-slate-900 px-2 py-0.5 text-xs font-semibold text-white">
       {label}
@@ -472,14 +460,14 @@ function PickOutcome({ pick }) {
   const score =
     pick.score_home !== null && pick.score_away !== null
       ? `${pick.away_abbr} ${pick.score_away} – ${pick.home_abbr} ${pick.score_home}`
-      : 'Final';
+      : "Final";
   return (
     <div className="flex flex-col items-end gap-1">
       <span className="text-xs font-medium text-slate-700">{score}</span>
       {won ? (
         <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-800 ring-1 ring-emerald-200">
           <span aria-hidden="true">✓</span>+{pick.points_awarded} pt
-          {pick.points_awarded === 1 ? '' : 's'}
+          {pick.points_awarded === 1 ? "" : "s"}
         </span>
       ) : (
         <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700 ring-1 ring-red-200">
@@ -498,8 +486,8 @@ function PickRow({ pick }) {
           className="text-sm font-semibold text-slate-900"
           title={`${pick.away_team} @ ${pick.home_team}`}
         >
-          <span className="text-slate-500">{pick.away_abbr}</span>{' '}
-          <span className="font-normal text-slate-400">@</span>{' '}
+          <span className="text-slate-500">{pick.away_abbr}</span>{" "}
+          <span className="font-normal text-slate-400">@</span>{" "}
           <span>{pick.home_abbr}</span>
         </div>
         <div className="mt-0.5 truncate text-xs text-slate-500">
@@ -555,7 +543,7 @@ function WeekCard({ week, isExpanded, onToggle }) {
         <span className="text-sm font-semibold text-slate-900">{summary}</span>
         <span
           aria-hidden="true"
-          className={`text-slate-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+          className={`text-slate-400 transition-transform ${isExpanded ? "rotate-90" : ""}`}
         >
           ▶
         </span>
@@ -621,7 +609,7 @@ function StatsCard({ season, entries, currentUserId }) {
   const picksMade = myEntry?.total_picked ?? 0;
   const breakdown = myEntry?.weekly_breakdown ?? [];
   const perfectWeeks = breakdown.filter((w) => (w.points ?? 0) >= 5).length;
-  const rank = myEntry?.rank ?? '—';
+  const rank = myEntry?.rank ?? "—";
 
   return (
     <section className="mt-6 rounded-lg bg-white p-6 shadow-sm ring-1 ring-slate-200">
@@ -649,16 +637,15 @@ export default function Profile() {
     error: seasonError,
     refetch: refetchSeason,
   } = useQuery({
-    queryKey: ['season', 'active'],
-    queryFn: async () => (await apiClient.get('/api/seasons/active')).data,
+    queryKey: ["season", "active"],
+    queryFn: async () => (await apiClient.get("/api/seasons/active")).data,
     retry: (failureCount, err) => {
       if (err?.response?.status === 404) return false;
       return failureCount < 2;
     },
   });
 
-  const seasonNotFound =
-    seasonIsError && seasonError?.response?.status === 404;
+  const seasonNotFound = seasonIsError && seasonError?.response?.status === 404;
 
   const {
     data: entries,
@@ -667,9 +654,9 @@ export default function Profile() {
     error: entriesError,
     refetch: refetchEntries,
   } = useQuery({
-    queryKey: ['leaderboard', 'season', season?.id],
+    queryKey: ["leaderboard", "season", season?.id],
     queryFn: async () => {
-      const { data } = await apiClient.get('/api/leaderboard', {
+      const { data } = await apiClient.get("/api/leaderboard", {
         params: { season_id: season.id },
       });
       return data;
@@ -684,9 +671,9 @@ export default function Profile() {
     error: pickHistoryError,
     refetch: refetchPickHistory,
   } = useQuery({
-    queryKey: ['users', 'me', 'picks', season?.id],
+    queryKey: ["users", "me", "picks", season?.id],
     queryFn: async () => {
-      const { data } = await apiClient.get('/api/users/me/picks', {
+      const { data } = await apiClient.get("/api/users/me/picks", {
         params: { season_id: season.id },
       });
       return data;

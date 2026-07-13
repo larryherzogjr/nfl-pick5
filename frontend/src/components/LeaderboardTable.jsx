@@ -1,7 +1,9 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import apiClient from "../api/client";
 
 function Avatar({ url, name }) {
-  const initial = (name || '?').trim().charAt(0).toUpperCase();
+  const initial = (name || "?").trim().charAt(0).toUpperCase();
   if (url) {
     return (
       <img
@@ -65,7 +67,86 @@ function WeeklyBreakdown({ breakdown }) {
   );
 }
 
-export default function LeaderboardTable({ entries }) {
+function formatSpread(spread) {
+  if (spread === null || spread === undefined) return "—";
+  if (spread === 0) return "PK";
+  return spread > 0 ? `+${spread}` : String(spread);
+}
+
+function PlayerPicks({ userId, weekId }) {
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: ["visible-picks", userId, weekId],
+    queryFn: async () =>
+      (await apiClient.get(`/api/users/${userId}/weeks/${weekId}/picks`)).data,
+    enabled: !!userId && !!weekId,
+  });
+
+  if (isLoading) {
+    return <p className="px-4 py-3 text-sm text-slate-500">Loading picks…</p>;
+  }
+  if (isError) {
+    return (
+      <div className="flex items-center justify-between gap-3 px-4 py-3 text-sm text-red-700">
+        <span>Could not load this player’s picks.</span>
+        <button
+          type="button"
+          onClick={() => refetch()}
+          className="font-medium underline"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+  if (!data?.picks?.length) {
+    return (
+      <p className="px-4 py-3 text-sm text-slate-500">
+        No picks are visible yet. Other players’ choices appear as each game
+        kicks off.
+      </p>
+    );
+  }
+
+  return (
+    <ul className="divide-y divide-slate-100">
+      {data.picks.map((pick) => {
+        const pickedTeam =
+          pick.picked_side === "home"
+            ? pick.home_abbr
+            : pick.picked_side === "away"
+              ? pick.away_abbr
+              : "PUSH";
+        return (
+          <li
+            key={pick.pick_id}
+            className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm"
+          >
+            <div>
+              <span className="font-medium text-slate-900">
+                {pick.away_abbr} @ {pick.home_abbr}
+              </span>
+              <span className="ml-2 text-slate-500">
+                {pick.home_abbr} {formatSpread(pick.spread_at_pick)}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-slate-900">{pickedTeam}</span>
+              {pick.points_awarded !== null &&
+                pick.points_awarded !== undefined && (
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700">
+                    {pick.points_awarded}{" "}
+                    {pick.points_awarded === 1 ? "pt" : "pts"}
+                  </span>
+                )}
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+export default function LeaderboardTable({ entries, selectedWeekId = null }) {
   const [expandedUserId, setExpandedUserId] = useState(null);
 
   if (!entries || entries.length === 0) {
@@ -77,9 +158,7 @@ export default function LeaderboardTable({ entries }) {
         <h2 className="text-base font-semibold text-slate-900">
           No graded picks yet
         </h2>
-        <p className="mt-1 text-sm text-slate-600">
-          Check back after Sunday.
-        </p>
+        <p className="mt-1 text-sm text-slate-600">Check back after Sunday.</p>
       </div>
     );
   }
@@ -120,7 +199,7 @@ export default function LeaderboardTable({ entries }) {
                   <tr
                     onClick={() => toggleRow(entry.user.id)}
                     className={`cursor-pointer transition-colors ${
-                      isExpanded ? 'bg-slate-50' : 'hover:bg-slate-50'
+                      isExpanded ? "bg-slate-50" : "hover:bg-slate-50"
                     }`}
                   >
                     <td className="whitespace-nowrap px-4 py-3 font-semibold text-slate-900">
@@ -149,7 +228,7 @@ export default function LeaderboardTable({ entries }) {
                     <td className="px-2 py-3 text-slate-400">
                       <span
                         className={`inline-block transition-transform ${
-                          isExpanded ? 'rotate-90' : ''
+                          isExpanded ? "rotate-90" : ""
                         }`}
                         aria-hidden="true"
                       >
@@ -161,7 +240,16 @@ export default function LeaderboardTable({ entries }) {
                     <tr className="bg-slate-50">
                       <td colSpan={6} className="px-4 py-3">
                         <div className="rounded-md bg-white ring-1 ring-slate-200">
-                          <WeeklyBreakdown breakdown={entry.weekly_breakdown} />
+                          {selectedWeekId ? (
+                            <PlayerPicks
+                              userId={entry.user.id}
+                              weekId={selectedWeekId}
+                            />
+                          ) : (
+                            <WeeklyBreakdown
+                              breakdown={entry.weekly_breakdown}
+                            />
+                          )}
                         </div>
                       </td>
                     </tr>

@@ -1,6 +1,6 @@
-export default function LoadingState({ label, size = 'md', className = '' }) {
-  const dim = size === 'sm' ? 'h-5 w-5 border-[3px]' : 'h-8 w-8 border-4';
-  const pad = size === 'sm' ? 'py-6' : 'py-12';
+export default function LoadingState({ label, size = "md", className = "" }) {
+  const dim = size === "sm" ? "h-5 w-5 border-[3px]" : "h-8 w-8 border-4";
+  const pad = size === "sm" ? "py-6" : "py-12";
   return (
     <div
       role="status"

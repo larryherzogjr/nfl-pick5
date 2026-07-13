@@ -1,7 +1,8 @@
 from collections import defaultdict
+from datetime import datetime, timezone
 
-from flask import Blueprint, jsonify, request
-from sqlalchemy import case, func
+from flask import Blueprint, g, jsonify, request
+from sqlalchemy import case, func, or_
 
 from app import db
 from app.models import Game, Pick, Season, User, Week
@@ -21,6 +22,7 @@ def get_leaderboard():
     if season_id_raw is not None and week_id_raw is not None:
         return jsonify({"error": "ambiguous_scope"}), 400
 
+    scoped_week_id = None
     if season_id_raw is not None:
         try:
             season_id = int(season_id_raw)
@@ -43,6 +45,7 @@ def get_leaderboard():
         if week is None:
             return jsonify({"error": "week_not_found"}), 404
         weeks = [week]
+        scoped_week_id = week.id
 
     week_ids = [w.id for w in weeks]
     if not week_ids:
@@ -93,12 +96,30 @@ def get_leaderboard():
             }
         )
 
+    # A weekly leaderboard must expose a row as soon as at least one of that
+    # player's games has kicked off, even if no pick has been graded yet.
+    # Otherwise there is no UI path to the post-kickoff pick details promised
+    # by the rules. A viewer's own row is also available before kickoff.
+    if scoped_week_id is not None:
+        visible_user_rows = (
+            db.session.query(Pick.user_id)
+            .join(Game, Pick.game_id == Game.id)
+            .filter(Game.week_id == scoped_week_id)
+            .filter(
+                or_(
+                    Game.kickoff <= datetime.now(timezone.utc),
+                    Pick.user_id == g.current_user.id,
+                )
+            )
+            .distinct()
+            .all()
+        )
+        user_ids.update(row.user_id for row in visible_user_rows)
+
     if not user_ids:
         return jsonify([])
 
-    users_by_id = {
-        u.id: u for u in User.query.filter(User.id.in_(user_ids)).all()
-    }
+    users_by_id = {u.id: u for u in User.query.filter(User.id.in_(user_ids)).all()}
 
     entries = []
     for uid in user_ids:

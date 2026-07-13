@@ -1,18 +1,18 @@
-import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import apiClient from '../api/client';
-import TopNav from '../components/TopNav';
-import LoadingState from '../components/LoadingState';
-import ErrorState from '../components/ErrorState';
+import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import apiClient from "../api/client";
+import TopNav from "../components/TopNav";
+import LoadingState from "../components/LoadingState";
+import ErrorState from "../components/ErrorState";
 
 export default function Home() {
   const navigate = useNavigate();
 
   const { data, isLoading, isError, error, refetch } = useQuery({
-    queryKey: ['weeks', 'current'],
+    queryKey: ["weeks", "current"],
     queryFn: async () => {
-      const { data } = await apiClient.get('/api/weeks/current');
+      const { data } = await apiClient.get("/api/weeks/current");
       return data;
     },
     retry: (failureCount, err) => {

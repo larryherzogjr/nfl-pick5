@@ -41,10 +41,14 @@ def _serialize_game(game: Game, now: datetime) -> dict:
         "home_abbr": game.home_abbr,
         "away_abbr": game.away_abbr,
         "kickoff": game.kickoff.isoformat(),
-        "spread_home": float(game.spread_home) if game.spread_home is not None else None,
+        "spread_home": (
+            float(game.spread_home) if game.spread_home is not None else None
+        ),
         "spread_source": game.spread_source,
         "spread_updated_at": (
-            game.spread_updated_at.isoformat() if game.spread_updated_at is not None else None
+            game.spread_updated_at.isoformat()
+            if game.spread_updated_at is not None
+            else None
         ),
         "score_home": game.score_home,
         "score_away": game.score_away,

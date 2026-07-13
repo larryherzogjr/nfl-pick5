@@ -13,6 +13,23 @@ SCORES_API_URL = "https://api.the-odds-api.com/v4/sports/americanfootball_nfl/sc
 REQUEST_TIMEOUT_SECONDS = 30
 
 
+def points_for_pick(
+    score_home: int, score_away: int, spread_at_pick: Decimal, picked_side: str
+) -> int:
+    """Return the points earned by one pick against its snapshotted spread."""
+    actual_margin = Decimal(score_home) - Decimal(score_away)
+    line = actual_margin + Decimal(spread_at_pick)
+    pushed = line == 0
+
+    if pushed and picked_side == "push":
+        return 2
+    if not pushed and picked_side == "home" and line > 0:
+        return 1
+    if not pushed and picked_side == "away" and line < 0:
+        return 1
+    return 0
+
+
 def _extract_team_score(scores: list[dict] | None, team_name: str) -> int | None:
     if not scores:
         return None
@@ -37,22 +54,15 @@ def score_game(game: Game) -> int:
     if not game.is_final or game.score_home is None or game.score_away is None:
         return 0
 
-    actual_margin = Decimal(game.score_home) - Decimal(game.score_away)
     graded = 0
 
     for pick in Pick.query.filter_by(game_id=game.id).all():
-        line = actual_margin + Decimal(pick.spread_at_pick)
-        pushed = line == 0
-        home_covered = line > 0
-
-        if pushed and pick.picked_side == "push":
-            pick.points_awarded = 2
-        elif not pushed and pick.picked_side == "home" and home_covered:
-            pick.points_awarded = 1
-        elif not pushed and pick.picked_side == "away" and not home_covered:
-            pick.points_awarded = 1
-        else:
-            pick.points_awarded = 0
+        pick.points_awarded = points_for_pick(
+            game.score_home,
+            game.score_away,
+            pick.spread_at_pick,
+            pick.picked_side,
+        )
         graded += 1
 
     db.session.commit()

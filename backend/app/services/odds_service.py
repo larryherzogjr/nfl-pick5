@@ -103,7 +103,11 @@ def refresh_odds() -> dict:
         try:
             kickoff = datetime.fromisoformat(commence_iso.replace("Z", "+00:00"))
         except ValueError:
-            logger.warning("Skipping event %s: unparseable commence_time %r", external_id, commence_iso)
+            logger.warning(
+                "Skipping event %s: unparseable commence_time %r",
+                external_id,
+                commence_iso,
+            )
             continue
         if kickoff.tzinfo is None:
             kickoff = kickoff.replace(tzinfo=timezone.utc)
@@ -148,7 +152,9 @@ def refresh_odds() -> dict:
             summary["skipped_no_spread"] += 1
             continue
 
-        existing = Game.query.filter_by(week_id=week.id, external_id=external_id).one_or_none()
+        existing = Game.query.filter_by(
+            week_id=week.id, external_id=external_id
+        ).one_or_none()
         if existing is None:
             game = Game(
                 week_id=week.id,

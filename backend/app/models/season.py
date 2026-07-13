@@ -15,8 +15,13 @@ class Season(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     year = db.Column(db.Integer, nullable=False)
     label = db.Column(db.String(20), nullable=False)
-    is_active = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+    is_active = db.Column(
+        db.Boolean, nullable=False, default=False, server_default=db.false()
+    )
 
     weeks = db.relationship(
-        "Week", back_populates="season", cascade="all, delete-orphan", order_by="Week.week_number"
+        "Week",
+        back_populates="season",
+        cascade="all, delete-orphan",
+        order_by="Week.week_number",
     )
