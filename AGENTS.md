@@ -7,7 +7,7 @@ changing production configuration.
 
 - Backend: Python 3.12, Flask, SQLAlchemy, PostgreSQL, APScheduler
 - Frontend: React, Vite, Tailwind CSS
-- `cd frontend && npm run lint && npm run build`
+- `cd frontend && npm test && npm run lint && npm run format:check && npm run build`
 - `cd backend && ruff check app tests && black --check app tests`
 - `cd backend && python -m unittest discover -s tests -v`
 - `docker compose -f docker-compose.yml -f docker-compose.prod.yml config --quiet`

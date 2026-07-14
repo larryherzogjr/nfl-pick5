@@ -122,6 +122,7 @@ ODDS_PREFERRED_BOOK=fanduel
 FRONTEND_URL=https://pick5.yourdomain.com
 VITE_API_BASE_URL=https://pick5.yourdomain.com
 SESSION_COOKIE_SECURE=true
+SESSION_CLEANUP_N_REQUESTS=100
 ```
 
 **Important**: `POSTGRES_PASSWORD` and the password embedded in `DATABASE_URL`
@@ -368,7 +369,9 @@ srv-pick5: docker compose -f docker-compose.yml -f docker-compose.prod.yml \
     run --rm backend flask db upgrade
 ```
 
-Expected: `Running upgrade  -> 4a14278b1a51, initial schema`.
+Expected: Alembic applies every pending migration through the current head.
+Existing installations may already have `flask_sessions`; the session-table
+migration detects and adopts that table safely.
 
 ### 3.3 Seed the season's weeks
 

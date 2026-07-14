@@ -1,14 +1,16 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from flask import Blueprint, jsonify, request
 
+from app import db
 from app.models import Game, Season, Week
 from app.utils.auth_helpers import login_required
 
 weeks_bp = Blueprint("weeks", __name__, url_prefix="/api")
 
 NFL_TZ = ZoneInfo("America/New_York")
+UPCOMING_WEEK_LOOKAHEAD_DAYS = 2
 
 
 def _serialize_season(season: Season) -> dict:
@@ -58,6 +60,37 @@ def _serialize_game(game: Game, now: datetime) -> dict:
     }
 
 
+def _current_or_upcoming_week(today: date) -> Week | None:
+    """Return the active season's current week, or the next week in a short gap.
+
+    Seeded week ranges normally run Thursday through Monday. The two-day
+    lookahead keeps the home page useful on Tuesday and Wednesday without
+    treating a far-future season as current during the offseason.
+    """
+    season = Season.query.filter_by(is_active=True).one_or_none()
+    if season is None:
+        return None
+
+    season_weeks = Week.query.filter_by(season_id=season.id)
+    current = (
+        season_weeks.filter(Week.start_date <= today, Week.end_date >= today)
+        .order_by(Week.start_date.asc())
+        .first()
+    )
+    if current is not None:
+        return current
+
+    lookahead_end = today + timedelta(days=UPCOMING_WEEK_LOOKAHEAD_DAYS)
+    return (
+        season_weeks.filter(
+            Week.start_date > today,
+            Week.start_date <= lookahead_end,
+        )
+        .order_by(Week.start_date.asc())
+        .first()
+    )
+
+
 @weeks_bp.get("/seasons/active")
 @login_required
 def get_active_season():
@@ -88,11 +121,7 @@ def list_weeks():
 @login_required
 def get_current_week():
     today = datetime.now(NFL_TZ).date()
-    week = (
-        Week.query.filter(Week.start_date <= today, Week.end_date >= today)
-        .order_by(Week.start_date.asc())
-        .first()
-    )
+    week = _current_or_upcoming_week(today)
     if week is None:
         return jsonify({"error": "no_current_week"}), 404
     return jsonify(_serialize_week(week))
@@ -101,7 +130,7 @@ def get_current_week():
 @weeks_bp.get("/weeks/<int:week_id>/games")
 @login_required
 def list_games_for_week(week_id: int):
-    week = Week.query.get(week_id)
+    week = db.session.get(Week, week_id)
     if week is None:
         return jsonify({"error": "week_not_found"}), 404
     now = datetime.now(timezone.utc)

@@ -1,9 +1,10 @@
 from datetime import datetime, timezone
 
 from flask import Blueprint, g, jsonify, request
+from sqlalchemy import select
 
 from app import db
-from app.models import Game, Pick, Week
+from app.models import Game, Pick, User, Week
 from app.utils.auth_helpers import login_required
 
 picks_bp = Blueprint("picks", __name__, url_prefix="/api")
@@ -48,6 +49,13 @@ def _replacement_plan(existing_picks: list[Pick], desired_game_ids: set[int], no
         if not is_locked(pick) and pick.game_id not in desired_game_ids
     ]
     return locked_game_ids | desired_game_ids, to_delete
+
+
+def _lock_user_for_pick_submission(user_id) -> None:
+    """Serialize pick submissions made concurrently by the same user."""
+    db.session.execute(
+        select(User.id).where(User.id == user_id).with_for_update()
+    ).scalar_one()
 
 
 @picks_bp.get("/weeks/<int:week_id>/picks")
@@ -98,6 +106,13 @@ def submit_picks_for_week(week_id: int):
         seen_game_ids.add(gid)
         parsed_items.append((gid, side))
 
+    if errors:
+        return jsonify({"errors": errors}), 400
+
+    # The weekly limit and replacement plan depend on the user's complete
+    # current state. Serialize same-user submissions before reading that state
+    # so two Gunicorn workers cannot independently pass the limit check.
+    _lock_user_for_pick_submission(g.current_user.id)
     now = datetime.now(timezone.utc)
     locked_skipped = 0
     to_apply: list[tuple[Game, str]] = []

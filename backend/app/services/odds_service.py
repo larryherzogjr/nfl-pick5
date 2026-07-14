@@ -62,7 +62,8 @@ def _find_week_for_kickoff(kickoff: datetime) -> Week | None:
     )
 
 
-def refresh_odds() -> dict:
+def refresh_odds(week_id: int | None = None) -> dict:
+    """Refresh market odds, optionally applying changes to one week only."""
     api_key = current_app.config.get("ODDS_API_KEY")
     if not api_key:
         raise RuntimeError("ODDS_API_KEY is not configured")
@@ -86,6 +87,7 @@ def refresh_odds() -> dict:
         "created": 0,
         "updated": 0,
         "skipped_no_week": 0,
+        "skipped_other_week": 0,
         "skipped_override": 0,
         "skipped_no_team": 0,
         "skipped_no_spread": 0,
@@ -134,6 +136,9 @@ def refresh_odds() -> dict:
                 kickoff.isoformat(),
             )
             summary["skipped_no_week"] += 1
+            continue
+        if week_id is not None and week.id != week_id:
+            summary["skipped_other_week"] += 1
             continue
 
         selected = _select_spread(event.get("bookmakers") or [], preferred_book)

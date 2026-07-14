@@ -1,5 +1,5 @@
 from authlib.integrations.flask_client import OAuth
-from flask import Flask
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_migrate import Migrate
 from flask_session import Session
@@ -16,6 +16,23 @@ oauth = OAuth()
 cors = CORS()
 
 
+def _validate_runtime_config(app: Flask) -> None:
+    """Fail fast on production-like settings that would weaken sessions."""
+    if not app.config.get("SESSION_COOKIE_SECURE"):
+        return
+
+    if app.config.get("SECRET_KEY") in {
+        None,
+        "",
+        "dev-insecure-change-me",
+        "change-me-to-random-string",
+    }:
+        raise RuntimeError("A strong FLASK_SECRET_KEY is required in production")
+
+    if not app.config.get("FRONTEND_URL", "").startswith("https://"):
+        raise RuntimeError("FRONTEND_URL must use HTTPS in production")
+
+
 def create_app(config_class: type = Config) -> Flask:
     app = Flask(__name__)
     # Trust X-Forwarded-* headers from the Nginx reverse proxy.
@@ -23,6 +40,17 @@ def create_app(config_class: type = Config) -> Flask:
     # because Flask sees the incoming request as plain HTTP from 127.0.0.1.
     app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
     app.config.from_object(config_class)
+    _validate_runtime_config(app)
+
+    @app.before_request
+    def reject_cross_origin_mutations():
+        if request.method not in {"POST", "PUT", "PATCH", "DELETE"}:
+            return None
+        origin = request.headers.get("Origin")
+        expected_origin = app.config["FRONTEND_URL"].rstrip("/")
+        if origin is not None and origin.rstrip("/") != expected_origin:
+            return jsonify({"error": "origin_not_allowed"}), 403
+        return None
 
     db.init_app(app)
     migrate.init_app(app, db)

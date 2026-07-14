@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { Navigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL;
+import apiBaseUrl from "../api/baseUrl";
 
 const EMBEDDED_WEBVIEW_REGEX =
   /FBAN|FBAV|Instagram|Line\/|MicroMessenger|Twitter|TikTok/;
@@ -80,7 +79,7 @@ export default function Login() {
             </button>
           ) : (
             <a
-              href={`${API_BASE}/auth/login/google`}
+              href={`${apiBaseUrl}/auth/login/google`}
               className="block w-full rounded-md border border-slate-300 bg-white px-4 py-2 text-center text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
             >
               Sign in with Google

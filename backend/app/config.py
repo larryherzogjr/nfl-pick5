@@ -17,6 +17,13 @@ def _bool_env(name: str, default: bool) -> bool:
     return raw.strip().lower() in ("1", "true", "yes", "on")
 
 
+def _int_env(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return int(raw)
+
+
 class Config:
     SECRET_KEY = os.environ.get("FLASK_SECRET_KEY", "dev-insecure-change-me")
     SQLALCHEMY_DATABASE_URI = _database_url()
@@ -33,6 +40,7 @@ class Config:
     SESSION_SQLALCHEMY_TABLE = "flask_sessions"
     SESSION_PERMANENT = True
     PERMANENT_SESSION_LIFETIME = timedelta(days=30)
+    SESSION_CLEANUP_N_REQUESTS = _int_env("SESSION_CLEANUP_N_REQUESTS", 100)
     SESSION_COOKIE_NAME = "pick5_session"
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"

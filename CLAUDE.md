@@ -69,28 +69,6 @@ The codebase deploys to a Hetzner bare-metal Ubuntu host fronted by host-level N
 
 - **`/srv/nfl-pick5` is mode 755**, not 750. Host Nginx needs `+x` to traverse into it.
 
-- **`seed-weeks` does not activate seasons.** It creates the Season row with `is_active = false` so future-year seedings don't accidentally overwrite the current active season. An explicit `UPDATE seasons SET is_active = true WHERE year = <year>` is required after seeding.
-
-- **Week 1 date range may need manual adjustment.** `seed-weeks` assumes Thursday-after-Labor-Day through the following Monday. NFL occasionally schedules Wednesday openers or international Saturday games that fall outside this range. After seeding, glance at the published schedule and `UPDATE weeks SET start_date = ...` if needed; otherwise odds refresh will silently skip out-of-range games with `skipped_no_week`.
-- **Score refresh includes a daily 06:00 ET catch-up.** Keep this job when adjusting the scheduler; it covers unusual Friday/Saturday games and late Monday finishes.
-
-## Production deployment knowledge
-
-The codebase deploys to a Hetzner bare-metal Ubuntu host fronted by host-level Nginx + Let's Encrypt. The full runbook lives in `DEPLOY.md`; key code-level requirements that affect implementation:
-
-- **Flask MUST use ProxyFix middleware.** In `backend/app/__init__.py`, immediately after `app = Flask(__name__)`:
-  ```python
-  from werkzeug.middleware.proxy_fix import ProxyFix
-  app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
-  ```
-  This makes Flask trust the `X-Forwarded-Proto: https` header sent by Nginx. Without it, `url_for(_external=True)` generates `http://` URLs and OAuth redirect-URI matching fails.
-
-- **Production compose binds to localhost only.** In `docker-compose.prod.yml`, backend and db port mappings use `127.0.0.1:` prefixes. Docker bypasses UFW iptables on bare-metal hosts; binding to `0.0.0.0:` would publicly expose internal services.
-
-- **Frontend builds via multi-stage Dockerfile.** The `dist` stage is `FROM scratch` and exports `/app/dist` via BuildKit `--output type=local`. No Node.js on the production host. After every export, `chmod -R go+rX` the dist directory so host Nginx (running as `www-data`) can read it — BuildKit creates the output directory with mode 700.
-
-- **`/srv/nfl-pick5` is mode 755**, not 750. Host Nginx needs `+x` to traverse into it.
-
 - **Persistent user data** (currently just avatars) lives at `/srv/nfl-pick5/data/`, bind-mounted into the backend container at `/app/data/`. Create the host path as `pick5` before the first `docker compose up` to avoid Docker auto-creating it as root.
 
 - **Nginx `/avatars/` must use the `^~` modifier.** Without it, the regex location for `.jpg`/`.png`/etc. wins and tries to serve uploaded avatars out of the React dist directory, returning broken images. The correct block:
@@ -109,3 +87,5 @@ The codebase deploys to a Hetzner bare-metal Ubuntu host fronted by host-level N
 - **`seed-weeks` does not activate seasons.** It creates the Season row with `is_active = false` so future-year seedings don't accidentally overwrite the current active season. An explicit `UPDATE seasons SET is_active = true WHERE year = <year>` is required after seeding.
 
 - **Week 1 date range may need manual adjustment.** `seed-weeks` assumes Thursday-after-Labor-Day through the following Monday. NFL occasionally schedules Wednesday openers or international Saturday games that fall outside this range. After seeding, glance at the published schedule and `UPDATE weeks SET start_date = ...` if needed; otherwise odds refresh will silently skip out-of-range games with `skipped_no_week`.
+
+- **Score refresh includes a daily 06:00 ET catch-up.** Keep this job when adjusting the scheduler; it covers unusual Friday/Saturday games and late Monday finishes.

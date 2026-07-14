@@ -14,6 +14,18 @@ function formatSpread(spread) {
   return spread > 0 ? `+${spread}` : `${spread}`;
 }
 
+function formatPickLine(pick, game) {
+  const homeSpread = pick.spread_at_pick;
+  if (pick.picked_side === "push") {
+    return `Push ${formatSpread(homeSpread)}`;
+  }
+  if (pick.picked_side === "home") {
+    return `${game.home_abbr} ${formatSpread(homeSpread)}`;
+  }
+  const awaySpread = homeSpread === 0 ? 0 : -homeSpread;
+  return `${game.away_abbr} ${formatSpread(awaySpread)}`;
+}
+
 function pointsBadge(points) {
   if (points === 2)
     return { text: "✓ 2 pts", className: "bg-green-100 text-green-800" };
@@ -80,6 +92,11 @@ export default function GameCard({
             <span className="font-medium text-slate-800">
               {game.home_abbr} {formatSpread(spread)}
             </span>
+            {currentPick?.spread_at_pick != null && (
+              <span className="text-xs font-medium text-slate-500">
+                Saved line: {formatPickLine(currentPick, game)}
+              </span>
+            )}
           </div>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2">

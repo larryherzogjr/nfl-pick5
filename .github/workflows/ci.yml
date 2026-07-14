@@ -7,6 +7,23 @@ on:
 jobs:
   backend:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: pick5
+          POSTGRES_PASSWORD: pick5
+          POSTGRES_DB: pick5_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U pick5 -d pick5_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://pick5:pick5@localhost:5432/pick5_test
+      TEST_DATABASE_URL: postgresql+psycopg://pick5:pick5@localhost:5432/pick5_test
     defaults:
       run:
         working-directory: backend
@@ -19,6 +36,8 @@ jobs:
       - run: pip install -r requirements.txt
       - run: ruff check app tests
       - run: black --check app tests
+      - run: flask db upgrade
+      - run: flask db check
       - run: python -m unittest discover -s tests -v
 
   frontend:
@@ -35,7 +54,16 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm audit --omit=dev
+      - run: npm test
       - run: npm run lint
+      - run: npm run format:check
       - run: npm run build
         env:
           VITE_API_BASE_URL: https://pick5.ospdy.com
+
+  compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cp .env.example .env
+      - run: docker compose -f docker-compose.yml -f docker-compose.prod.yml config --quiet

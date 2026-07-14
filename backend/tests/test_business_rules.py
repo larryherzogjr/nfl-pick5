@@ -1,7 +1,9 @@
+import os
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from flask import Flask
 
@@ -9,6 +11,7 @@ from app import create_app, db
 from app.models import Game, Pick, Season, User, Week
 from app.routes.auth import _email_belongs_to_another_user
 from app.routes.picks import _replacement_plan
+from app.routes.weeks import _current_or_upcoming_week
 from app.scheduler.run import build_scheduler
 from app.services.score_service import points_for_pick
 
@@ -16,7 +19,7 @@ from app.services.score_service import points_for_pick
 class TestConfig:
     TESTING = True
     SECRET_KEY = "test-secret"
-    SQLALCHEMY_DATABASE_URI = "sqlite://"
+    SQLALCHEMY_DATABASE_URI = os.environ.get("TEST_DATABASE_URL", "sqlite://")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SESSION_TYPE = "sqlalchemy"
     SESSION_SQLALCHEMY_TABLE = "test_sessions"
@@ -27,6 +30,12 @@ class TestConfig:
     GOOGLE_CLIENT_SECRET = None
     ODDS_API_KEY = None
     ODDS_PREFERRED_BOOK = "fanduel"
+
+
+class UnsafeProductionConfig(TestConfig):
+    SECRET_KEY = "dev-insecure-change-me"
+    SESSION_COOKIE_SECURE = True
+    FRONTEND_URL = "https://pick5.example.com"
 
 
 class PickReplacementTests(unittest.TestCase):
@@ -51,6 +60,10 @@ class PickReplacementTests(unittest.TestCase):
 
         self.assertEqual(final_ids, {1, 3, 4})
         self.assertEqual(to_delete, [omitted_unlocked])
+
+    def test_production_rejects_the_default_session_secret(self):
+        with self.assertRaisesRegex(RuntimeError, "FLASK_SECRET_KEY"):
+            create_app(UnsafeProductionConfig)
 
 
 class ScoringTests(unittest.TestCase):
@@ -78,6 +91,7 @@ class PickEndpointTests(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         db.session.remove()
+        db.engine.dispose()
         cls.context.pop()
 
     def setUp(self):
@@ -212,6 +226,45 @@ class PickEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         remaining = Pick.query.filter_by(user_id=self.target.id).all()
         self.assertEqual([pick.game_id for pick in remaining], [self.locked_game.id])
+
+    def test_cross_origin_mutation_is_rejected(self):
+        self._login(self.target)
+
+        response = self.client.post(
+            f"/api/weeks/{self.week.id}/picks",
+            json={"picks": []},
+            headers={"Origin": "https://attacker.example.com"},
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.get_json(), {"error": "origin_not_allowed"})
+
+    def test_current_week_falls_forward_across_the_tuesday_wednesday_gap(self):
+        self.week.start_date = date(2026, 9, 10)
+        self.week.end_date = date(2026, 9, 14)
+        db.session.commit()
+
+        resolved = _current_or_upcoming_week(date(2026, 9, 8))
+
+        self.assertEqual(resolved.id, self.week.id)
+
+    def test_current_week_does_not_jump_to_a_far_future_week(self):
+        self.week.start_date = date(2026, 9, 10)
+        self.week.end_date = date(2026, 9, 14)
+        db.session.commit()
+
+        self.assertIsNone(_current_or_upcoming_week(date(2026, 9, 1)))
+
+    def test_admin_odds_refresh_is_scoped_to_the_requested_week(self):
+        self.viewer.is_admin = True
+        db.session.commit()
+        self._login(self.viewer)
+
+        with patch("app.routes.admin.refresh_odds", return_value={"updated": 0}) as fn:
+            response = self.client.post(f"/api/admin/weeks/{self.week.id}/refresh-odds")
+
+        self.assertEqual(response.status_code, 200)
+        fn.assert_called_once_with(week_id=self.week.id)
 
 
 class SchedulerTests(unittest.TestCase):

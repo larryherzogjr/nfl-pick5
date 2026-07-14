@@ -59,6 +59,8 @@ User 1──M Pick M──1 Game M──1 Week M──1 Season
 | email           | VARCHAR(255) | Unique; from OAuth profile                 |
 | display_name    | VARCHAR(100) | From OAuth profile; editable               |
 | avatar_url      | TEXT         | From OAuth profile                         |
+| oauth_display_name | VARCHAR(100) | Latest provider name used for reset     |
+| oauth_avatar_url | TEXT        | Latest provider avatar used for reset      |
 | oauth_provider  | VARCHAR(20)  | `'google'` for active accounts; legacy values may remain |
 | oauth_subject   | VARCHAR(255) | Provider's unique user ID                  |
 | is_admin        | BOOLEAN      | Default false                              |
@@ -225,7 +227,8 @@ def score_game(game):
 
 ## 6. API Endpoints
 
-All endpoints return JSON. Auth-required endpoints expect a session cookie or Bearer token.
+All endpoints return JSON. Auth-required endpoints use the server-side session
+identified by the `pick5_session` cookie.
 
 ### 6.1 Auth
 
@@ -234,6 +237,9 @@ All endpoints return JSON. Auth-required endpoints expect a session cookie or Be
 | GET    | /auth/login/google    | Redirect to Google OAuth       |
 | GET    | /auth/callback/google | Google OAuth callback          |
 | GET    | /auth/me              | Return current user profile    |
+| PATCH  | /auth/me              | Update display name            |
+| POST   | /auth/me/avatar       | Upload and normalize avatar    |
+| POST   | /auth/me/reset-to-oauth | Restore provider name/avatar |
 | POST   | /auth/logout          | Clear session                  |
 
 ### 6.2 Weeks & Games
@@ -242,7 +248,7 @@ All endpoints return JSON. Auth-required endpoints expect a session cookie or Be
 |--------|-------------------------------|------------------------------------------|
 | GET    | /api/seasons/active           | Get the active season                    |
 | GET    | /api/weeks?season_id=X        | List weeks for a season                  |
-| GET    | /api/weeks/current            | Get the current NFL week (date-derived)  |
+| GET    | /api/weeks/current            | Get the active season's current week; look ahead up to two days between seeded week ranges |
 | GET    | /api/weeks/:id/games          | List all games for a week with spreads   |
 
 ### 6.3 Picks
@@ -318,8 +324,10 @@ def visible_picks(viewer, target_user, week):
 |--------|------------------------------------|--------------------------------------|
 | POST   | /api/admin/games/:id/score        | Manually set final score             |
 | POST   | /api/admin/games/:id/spread       | Override spread for a game (affects future picks only) |
-| POST   | /api/admin/weeks/:id/refresh-odds | Trigger manual odds refresh          |
+| POST   | /api/admin/weeks/:id/refresh-odds | Refresh odds for the selected week   |
 | POST   | /api/admin/weeks/:id/score-all    | Re-run scoring for all final games   |
+| POST   | /api/admin/scores/refresh          | Refresh completed games from the API |
+| GET    | /api/admin/users                   | List registered users                |
 
 The spread override endpoint must display a warning that the change affects only new and re-submitted picks — already-locked picks retain their snapshot.
 
@@ -375,6 +383,8 @@ that originally created it.
 - Session cookie: `HttpOnly`, `Secure`, `SameSite=Lax`
 - Session expiry: 30 days (rolling)
 - React frontend checks `/auth/me` on load; if 401, show login screen
+- Reject browser mutation requests whose `Origin` does not match `FRONTEND_URL`.
+- Production startup rejects the placeholder secret and a non-HTTPS frontend URL.
 
 ---
 
@@ -395,14 +405,14 @@ that originally created it.
 
 - **`<GameCard />`** — Displays matchup, current market spread, kickoff time, and pick toggle. The toggle shows three options when the current spread is a whole integer (`home`, `away`, `push (2x)`) or two options on half-point spreads. Shows "LOCKED" state post-kickoff. Highlights the user's current pick and displays the user's snapshotted spread alongside if it differs from the current market line.
 - **`<PickBar />`** — Sticky bottom bar showing "3 of 5 picks made" with submit button. Allows partial saves with a warning.
-- **`<CountdownTimer />`** — Per-game countdown to kickoff. Switches to "In Progress" / "Final" based on game state.
-- **`<LeaderboardTable />`** — Sortable table with rank (tied players share rank), user, weekly points, season total, and perfect-weeks count. Expandable rows show weekly breakdown.
-- **`<WeekSelector />`** — Dropdown or tab bar to navigate between weeks.
+- **`<CountdownTimer />`** — Per-game countdown to kickoff that switches to a locked state when time expires.
+- **`<LeaderboardTable />`** — Server-ranked table with rank (tied players share rank), user, points, and perfect-weeks count. Expandable rows show weekly breakdown or post-kickoff pick details.
+- **`<WeekSelector />`** — Dropdown on the pick screen for direct week navigation, with a warning before discarding unsaved changes.
 
 ### 9.3 State Management
 
 - Use React Context for auth state (`currentUser`)
-- Use React Query (TanStack Query) for server state (games, picks, leaderboard) — handles caching, refetching, and optimistic updates on pick submission
+- Use React Query (TanStack Query) for server state (games, picks, leaderboard), caching, and refetching after mutations.
 
 ---
 
@@ -499,6 +509,7 @@ ODDS_PREFERRED_BOOK=fanduel
 
 # Frontend
 VITE_API_BASE_URL=http://localhost:5000
+SESSION_CLEANUP_N_REQUESTS=100
 ```
 
 ---
@@ -585,7 +596,9 @@ This application is designed to run on a Docker-capable host. For the developer'
 ### Scheduling and Time-Range Caveats
 
 - `seed-weeks <year>` computes Week 1 as the Thursday after Labor Day through the following Monday. This is correct in nearly all years, but the NFL occasionally schedules a Wednesday opener (most recently 2026) or an international game on Saturday. After seeding, spot-check Week 1's date range against the published NFL schedule and adjust with a manual `UPDATE` if any game's kickoff falls outside the seeded `start_date`/`end_date`. Games outside the range will silently skip during odds refresh with `skipped_no_week`.
+- `/api/weeks/current` uses the current active-season range first, then looks ahead at most two days. This bridges the normal Tuesday/Wednesday gap without redirecting users into a far-future season during the offseason.
 - The season created by `seed-weeks` defaults to `is_active = false` (the partial unique index only allows one active season, so auto-activating would risk overwriting in future-year seedings). Mark the season active explicitly: `UPDATE seasons SET is_active = true WHERE year = <year>;`. Without this, the AdminPanel weeks dropdown shows "No weeks available" and `/api/seasons/active` returns 404.
+- The built-in seeder creates 18 regular-season weeks. The schema and frontend can represent week 19+, but postseason rows currently require a separate seeding/operations decision.
 
 ### Filesystem Permissions for Reverse-Proxied Static Files
 

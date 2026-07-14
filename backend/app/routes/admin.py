@@ -36,10 +36,10 @@ def list_users():
 @admin_bp.post("/weeks/<int:week_id>/refresh-odds")
 @admin_required
 def refresh_odds_for_week(week_id: int):
-    week = Week.query.get(week_id)
+    week = db.session.get(Week, week_id)
     if week is None:
         return jsonify({"error": "week_not_found"}), 404
-    summary = refresh_odds()
+    summary = refresh_odds(week_id=week_id)
     return jsonify(summary)
 
 
@@ -53,7 +53,7 @@ def refresh_scores_endpoint():
 @admin_bp.post("/games/<int:game_id>/score")
 @admin_required
 def set_game_score(game_id: int):
-    game = Game.query.get(game_id)
+    game = db.session.get(Game, game_id)
     if game is None:
         return jsonify({"error": "game_not_found"}), 404
 
@@ -94,7 +94,7 @@ def set_game_score(game_id: int):
 @admin_bp.post("/weeks/<int:week_id>/score-all")
 @admin_required
 def score_all_games_for_week(week_id: int):
-    week = Week.query.get(week_id)
+    week = db.session.get(Week, week_id)
     if week is None:
         return jsonify({"error": "week_not_found"}), 404
 
@@ -107,7 +107,7 @@ def score_all_games_for_week(week_id: int):
 @admin_bp.post("/games/<int:game_id>/spread")
 @admin_required
 def set_game_spread(game_id: int):
-    game = Game.query.get(game_id)
+    game = db.session.get(Game, game_id)
     if game is None:
         return jsonify({"error": "game_not_found"}), 404
 

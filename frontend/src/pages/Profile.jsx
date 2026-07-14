@@ -5,11 +5,10 @@ import { useAuth } from "../context/AuthContext";
 import TopNav from "../components/TopNav";
 import LoadingState from "../components/LoadingState";
 import ErrorState from "../components/ErrorState";
+import { buildWeeklyCells, perfectWeekCount } from "../utils/standings";
 
 const MAX_DISPLAY_NAME_LENGTH = 100;
 const MAX_AVATAR_SIZE = 5 * 1024 * 1024;
-
-const TOTAL_WEEKS = 18;
 
 const AVATAR_ERROR_MESSAGES = {
   file_too_large: "File is too large (max 5 MB)",
@@ -344,29 +343,21 @@ function StatTile({ label, value }) {
   );
 }
 
-function weeklyCellClass(points) {
-  if (points == null) {
+function weeklyCellClass(cell) {
+  if (cell.points == null) {
     return "bg-slate-50 text-slate-300 ring-slate-200";
   }
-  if (points >= 5) {
+  if (cell.isPerfect) {
     return "bg-emerald-100 text-emerald-900 ring-emerald-300";
   }
-  if (points === 0) {
+  if (cell.points === 0) {
     return "bg-red-50 text-red-700 ring-red-200";
   }
   return "bg-white text-slate-800 ring-slate-200";
 }
 
 function WeeklyStrip({ breakdown }) {
-  const byWeek = new Map();
-  for (const entry of breakdown ?? []) {
-    byWeek.set(entry.week, entry.points);
-  }
-  const cells = [];
-  for (let w = 1; w <= TOTAL_WEEKS; w += 1) {
-    const points = byWeek.has(w) ? byWeek.get(w) : null;
-    cells.push({ week: w, points });
-  }
+  const cells = buildWeeklyCells(breakdown);
   return (
     <div className="mt-6">
       <h3 className="text-sm font-semibold text-slate-700">Weekly breakdown</h3>
@@ -374,13 +365,11 @@ function WeeklyStrip({ breakdown }) {
         {cells.map((c) => (
           <div
             key={c.week}
-            className={`flex flex-col items-center justify-center rounded-md px-1 py-2 text-sm shadow-sm ring-1 ${weeklyCellClass(
-              c.points,
-            )}`}
+            className={`flex flex-col items-center justify-center rounded-md px-1 py-2 text-sm shadow-sm ring-1 ${weeklyCellClass(c)}`}
             title={
               c.points == null
                 ? `Week ${c.week}: not graded`
-                : `Week ${c.week}: ${c.points} pts`
+                : `Week ${c.week}: ${c.points} pts${c.isPerfect ? " — perfect" : ""}`
             }
           >
             <span className="text-[10px] font-medium uppercase tracking-wide opacity-75">
@@ -608,7 +597,7 @@ function StatsCard({ season, entries, currentUserId }) {
   const points = myEntry?.points ?? 0;
   const picksMade = myEntry?.total_picked ?? 0;
   const breakdown = myEntry?.weekly_breakdown ?? [];
-  const perfectWeeks = breakdown.filter((w) => (w.points ?? 0) >= 5).length;
+  const perfectWeeks = perfectWeekCount(myEntry);
   const rank = myEntry?.rank ?? "—";
 
   return (

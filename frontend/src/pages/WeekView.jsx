@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import apiClient from "../api/client";
 import TopNav from "../components/TopNav";
@@ -7,6 +7,7 @@ import GameCard from "../components/GameCard";
 import PickBar from "../components/PickBar";
 import LoadingState from "../components/LoadingState";
 import ErrorState from "../components/ErrorState";
+import WeekSelector from "../components/WeekSelector";
 
 const PICK_ERROR_MESSAGES = {
   game_not_in_week: "Game is not part of this week.",
@@ -20,8 +21,9 @@ const PICK_ERROR_MESSAGES = {
 export default function WeekView() {
   const { weekId } = useParams();
   const weekIdNum = Number(weekId);
-  const weekIdValid = Number.isFinite(weekIdNum);
+  const weekIdValid = Number.isInteger(weekIdNum) && weekIdNum > 0;
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const picksQueryKey = ["picks", "week", weekIdNum];
 
@@ -87,6 +89,12 @@ export default function WeekView() {
   const successTimerRef = useRef(null);
 
   useEffect(() => {
+    setSelected({});
+    setSubmitErrors([]);
+    setSuccessVisible(false);
+  }, [weekIdNum]);
+
+  useEffect(() => {
     if (!picks) return;
     const initial = {};
     for (const p of picks) {
@@ -135,6 +143,17 @@ export default function WeekView() {
     }
     return false;
   }, [selected, picksByGame]);
+
+  const handleWeekChange = (nextWeekId) => {
+    if (nextWeekId === weekIdNum) return;
+    if (isDirty) {
+      const shouldLeave = window.confirm(
+        "You have unsaved pick changes. Leave this week without saving?",
+      );
+      if (!shouldLeave) return;
+    }
+    navigate(`/week/${nextWeekId}`);
+  };
 
   const submitMutation = useMutation({
     mutationFn: async () => {
@@ -215,13 +234,23 @@ export default function WeekView() {
     <div className="min-h-screen bg-slate-50 pb-24">
       <TopNav />
       <main className="mx-auto max-w-3xl px-4 py-6">
-        <header className="mb-4">
-          <h1 className="text-2xl font-bold text-slate-900">
-            {week?.label ?? `Week ${weekId}`}
-          </h1>
-          {season?.label && (
-            <p className="mt-1 text-sm text-slate-500">{season.label} season</p>
-          )}
+        <header className="mb-4 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">
+              {week?.label ?? `Week ${weekId}`}
+            </h1>
+            {season?.label && (
+              <p className="mt-1 text-sm text-slate-500">
+                {season.label} season
+              </p>
+            )}
+          </div>
+          <WeekSelector
+            weeks={weeks}
+            value={week?.id ?? weekIdNum}
+            onChange={handleWeekChange}
+            disabled={!weekIdValid}
+          />
         </header>
 
         {successVisible && (
