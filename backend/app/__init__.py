@@ -95,8 +95,9 @@ def create_app(config_class: type = Config) -> Flask:
     app.register_blueprint(media_bp)
     app.register_blueprint(health_bp)
 
-    from app.commands import seed_weeks
+    from app.commands import seed_preseason_weeks, seed_weeks
 
     app.cli.add_command(seed_weeks)
+    app.cli.add_command(seed_preseason_weeks)
 
     return app

@@ -87,7 +87,7 @@ def get_my_picks():
         .join(Game, Pick.game_id == Game.id)
         .join(Week, Game.week_id == Week.id)
         .filter(Pick.user_id == g.current_user.id, Week.season_id == season_id)
-        .order_by(Week.week_number.desc(), Game.kickoff.asc(), Pick.id.asc())
+        .order_by(Week.start_date.desc(), Game.kickoff.asc(), Pick.id.asc())
         .all()
     )
 
@@ -100,13 +100,14 @@ def get_my_picks():
 
     weeks_payload = []
     for week_id in sorted(
-        week_by_id.keys(), key=lambda wid: week_by_id[wid].week_number, reverse=True
+        week_by_id.keys(), key=lambda wid: week_by_id[wid].start_date, reverse=True
     ):
         week = week_by_id[week_id]
         weeks_payload.append(
             {
                 "week_id": week.id,
                 "week_number": week.week_number,
+                "phase": week.phase,
                 "week_label": week.label,
                 "picks": [_serialize_pick(p) for p in picks_by_week[week_id]],
             }

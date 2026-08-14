@@ -418,6 +418,12 @@ export default function AdminPanel() {
     queryFn: async () => (await apiClient.get("/api/seasons/active")).data,
   });
 
+  const { data: currentWeek, isFetched: currentWeekFetched } = useQuery({
+    queryKey: ["weeks", "current"],
+    queryFn: async () => (await apiClient.get("/api/weeks/current")).data,
+    retry: false,
+  });
+
   const { data: weeks } = useQuery({
     queryKey: ["weeks", "season", season?.id],
     queryFn: async () => {
@@ -435,11 +441,13 @@ export default function AdminPanel() {
 
   useEffect(() => {
     if (!weeks || weeks.length === 0) return;
-    const first = weeks[0].id;
-    setOddsWeekId((prev) => prev ?? first);
-    setScoreWeekId((prev) => prev ?? first);
-    setSpreadWeekId((prev) => prev ?? first);
-  }, [weeks]);
+    if (!currentWeekFetched) return;
+    const initial =
+      weeks.find((week) => week.id === currentWeek?.id)?.id ?? weeks[0].id;
+    setOddsWeekId((prev) => prev ?? initial);
+    setScoreWeekId((prev) => prev ?? initial);
+    setSpreadWeekId((prev) => prev ?? initial);
+  }, [weeks, currentWeek?.id, currentWeekFetched]);
 
   const [oddsResult, setOddsResult] = useState(null);
   const [oddsError, setOddsError] = useState(null);

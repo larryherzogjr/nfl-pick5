@@ -7,6 +7,7 @@ from sqlalchemy import case, func, or_
 from app import db
 from app.models import Game, Pick, Season, User, Week
 from app.utils.auth_helpers import login_required
+from app.utils.season_phases import PRESEASON_PHASE, VALID_PHASES
 
 leaderboard_bp = Blueprint("leaderboard", __name__, url_prefix="/api")
 
@@ -16,11 +17,16 @@ leaderboard_bp = Blueprint("leaderboard", __name__, url_prefix="/api")
 def get_leaderboard():
     season_id_raw = request.args.get("season_id")
     week_id_raw = request.args.get("week_id")
+    phase = request.args.get("phase")
 
     if season_id_raw is None and week_id_raw is None:
         return jsonify({"error": "missing_scope"}), 400
     if season_id_raw is not None and week_id_raw is not None:
         return jsonify({"error": "ambiguous_scope"}), 400
+    if phase is not None and phase not in VALID_PHASES:
+        return jsonify({"error": "phase_invalid"}), 400
+    if phase is not None and season_id_raw is None:
+        return jsonify({"error": "phase_requires_season_scope"}), 400
 
     scoped_week_id = None
     if season_id_raw is not None:
@@ -31,11 +37,15 @@ def get_leaderboard():
         season = db.session.get(Season, season_id)
         if season is None:
             return jsonify({"error": "season_not_found"}), 404
-        weeks = (
-            Week.query.filter_by(season_id=season_id)
-            .order_by(Week.week_number.asc())
-            .all()
-        )
+        weeks_query = Week.query.filter_by(season_id=season_id)
+        if phase is not None:
+            weeks_query = weeks_query.filter(Week.phase == phase)
+        else:
+            # Preseason is a test competition and never contributes to the
+            # official season standings. Regular and postseason weeks retain
+            # the existing season-long behavior.
+            weeks_query = weeks_query.filter(Week.phase != PRESEASON_PHASE)
+        weeks = weeks_query.order_by(Week.start_date.asc()).all()
     else:
         try:
             week_id = int(week_id_raw)
@@ -51,7 +61,7 @@ def get_leaderboard():
     if not week_ids:
         return jsonify([])
 
-    week_number_by_id = {w.id: w.week_number for w in weeks}
+    week_by_id = {w.id: w for w in weeks}
 
     non_zero_sum = func.sum(case((Pick.points_awarded > 0, 1), else_=0))
 
@@ -89,7 +99,10 @@ def get_leaderboard():
             user_perfect_weeks[row.user_id] += 1
         user_breakdown[row.user_id].append(
             {
-                "week": week_number_by_id[row.week_id],
+                "week": week_by_id[row.week_id].week_number,
+                "week_id": row.week_id,
+                "label": week_by_id[row.week_id].label,
+                "phase": week_by_id[row.week_id].phase,
                 "points": points,
                 "picks_scored": picks_scored,
                 "is_perfect": is_perfect,
@@ -126,7 +139,10 @@ def get_leaderboard():
         u = users_by_id.get(uid)
         if u is None:
             continue
-        breakdown = sorted(user_breakdown[uid], key=lambda b: b["week"])
+        breakdown = sorted(
+            user_breakdown[uid],
+            key=lambda b: week_by_id[b["week_id"]].start_date,
+        )
         entries.append(
             {
                 "user": {

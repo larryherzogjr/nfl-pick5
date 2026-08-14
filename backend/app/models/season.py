@@ -23,5 +23,5 @@ class Season(db.Model):
         "Week",
         back_populates="season",
         cascade="all, delete-orphan",
-        order_by="Week.week_number",
+        order_by="Week.start_date",
     )

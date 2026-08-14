@@ -356,8 +356,8 @@ function weeklyCellClass(cell) {
   return "bg-white text-slate-800 ring-slate-200";
 }
 
-function WeeklyStrip({ breakdown }) {
-  const cells = buildWeeklyCells(breakdown);
+function WeeklyStrip({ breakdown, minimumWeeks = 18, prefix = "W" }) {
+  const cells = buildWeeklyCells(breakdown, minimumWeeks);
   return (
     <div className="mt-6">
       <h3 className="text-sm font-semibold text-slate-700">Weekly breakdown</h3>
@@ -368,12 +368,13 @@ function WeeklyStrip({ breakdown }) {
             className={`flex flex-col items-center justify-center rounded-md px-1 py-2 text-sm shadow-sm ring-1 ${weeklyCellClass(c)}`}
             title={
               c.points == null
-                ? `Week ${c.week}: not graded`
-                : `Week ${c.week}: ${c.points} pts${c.isPerfect ? " — perfect" : ""}`
+                ? `${prefix}${c.week}: not graded`
+                : `${prefix}${c.week}: ${c.points} pts${c.isPerfect ? " — perfect" : ""}`
             }
           >
             <span className="text-[10px] font-medium uppercase tracking-wide opacity-75">
-              W{c.week}
+              {prefix}
+              {c.week}
             </span>
             <span className="mt-0.5 font-semibold">
               {c.points == null ? "—" : c.points}
@@ -592,7 +593,7 @@ function PickHistoryCard({ data }) {
   );
 }
 
-function StatsCard({ season, entries, currentUserId }) {
+function StatsCard({ season, entries, currentUserId, preseason = false }) {
   const myEntry = (entries ?? []).find((e) => e.user.id === currentUserId);
   const points = myEntry?.points ?? 0;
   const picksMade = myEntry?.total_picked ?? 0;
@@ -603,21 +604,37 @@ function StatsCard({ season, entries, currentUserId }) {
   return (
     <section className="mt-6 rounded-lg bg-white p-6 shadow-sm ring-1 ring-slate-200">
       <h2 className="text-lg font-semibold text-slate-900">
-        {season.label} Season
+        {preseason
+          ? `${season.label} Preseason Test`
+          : `${season.label} Season`}
       </h2>
       <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatTile label="Points" value={points} />
         <StatTile label="Picks made" value={picksMade} />
         <StatTile label="Perfect weeks" value={perfectWeeks} />
-        <StatTile label="Season rank" value={rank} />
+        <StatTile
+          label={preseason ? "Preseason rank" : "Season rank"}
+          value={rank}
+        />
       </div>
-      <WeeklyStrip breakdown={breakdown} />
+      <WeeklyStrip
+        breakdown={breakdown}
+        minimumWeeks={preseason ? 3 : 18}
+        prefix={preseason ? "P" : "W"}
+      />
     </section>
   );
 }
 
 export default function Profile() {
   const { user } = useAuth();
+
+  const { data: currentWeek } = useQuery({
+    queryKey: ["weeks", "current"],
+    queryFn: async () => (await apiClient.get("/api/weeks/current")).data,
+    retry: false,
+  });
+  const preseason = currentWeek?.phase === "preseason";
 
   const {
     data: season,
@@ -643,10 +660,18 @@ export default function Profile() {
     error: entriesError,
     refetch: refetchEntries,
   } = useQuery({
-    queryKey: ["leaderboard", "season", season?.id],
+    queryKey: [
+      "leaderboard",
+      "season",
+      season?.id,
+      preseason ? "preseason" : null,
+    ],
     queryFn: async () => {
       const { data } = await apiClient.get("/api/leaderboard", {
-        params: { season_id: season.id },
+        params: {
+          season_id: season.id,
+          ...(preseason ? { phase: "preseason" } : {}),
+        },
       });
       return data;
     },
@@ -726,6 +751,7 @@ export default function Profile() {
                 season={season}
                 entries={entries ?? []}
                 currentUserId={user.id}
+                preseason={preseason}
               />
             )}
 

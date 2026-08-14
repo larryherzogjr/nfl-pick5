@@ -1,16 +1,43 @@
 import logging
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import requests
 from flask import current_app
 
 from app import db
-from app.models import Game, Pick
+from app.models import Game, Pick, Season, Week
+from app.utils.season_phases import sport_key_for_phase
 
 logger = logging.getLogger(__name__)
 
-SCORES_API_URL = "https://api.the-odds-api.com/v4/sports/americanfootball_nfl/scores"
+SCORES_API_ROOT = "https://api.the-odds-api.com/v4/sports"
 REQUEST_TIMEOUT_SECONDS = 30
+RECENT_GAME_LOOKBACK_DAYS = 4
+UPCOMING_GAME_LOOKAHEAD_DAYS = 1
+
+
+def _scores_api_url(phase: str) -> str:
+    return f"{SCORES_API_ROOT}/{sport_key_for_phase(phase)}/scores"
+
+
+def _score_refresh_phases() -> list[str]:
+    """Return active-season phases with a recent or imminent unfinished game."""
+    now = datetime.now(timezone.utc)
+    rows = (
+        db.session.query(Week.phase)
+        .join(Game, Game.week_id == Week.id)
+        .join(Season, Week.season_id == Season.id)
+        .filter(
+            Season.is_active.is_(True),
+            Game.is_final.is_(False),
+            Game.kickoff >= now - timedelta(days=RECENT_GAME_LOOKBACK_DAYS),
+            Game.kickoff <= now + timedelta(days=UPCOMING_GAME_LOOKAHEAD_DAYS),
+        )
+        .distinct()
+        .all()
+    )
+    return sorted(row.phase for row in rows)
 
 
 def points_for_pick(
@@ -74,47 +101,57 @@ def refresh_scores() -> dict:
     if not api_key:
         raise RuntimeError("ODDS_API_KEY is not configured")
 
-    response = requests.get(
-        SCORES_API_URL,
-        params={"apiKey": api_key, "daysFrom": 3},
-        timeout=REQUEST_TIMEOUT_SECONDS,
-    )
-    response.raise_for_status()
-    events = response.json()
+    phases = _score_refresh_phases()
+    summary = {
+        "finalized": 0,
+        "already_final": 0,
+        "skipped_unknown": 0,
+        "requested_phases": phases,
+    }
 
-    summary = {"finalized": 0, "already_final": 0, "skipped_unknown": 0}
+    for phase in phases:
+        response = requests.get(
+            _scores_api_url(phase),
+            params={"apiKey": api_key, "daysFrom": 3},
+            timeout=REQUEST_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
 
-    for event in events:
-        if not event.get("completed"):
-            continue
-        external_id = event.get("id")
-        if not external_id:
-            continue
+        for event in response.json():
+            if not event.get("completed"):
+                continue
+            external_id = event.get("id")
+            if not external_id:
+                continue
 
-        game = Game.query.filter_by(external_id=external_id).first()
-        if game is None:
-            summary["skipped_unknown"] += 1
-            continue
-
-        if game.is_final:
-            summary["already_final"] += 1
-            continue
-
-        scores = event.get("scores")
-        score_home = _extract_team_score(scores, game.home_team)
-        score_away = _extract_team_score(scores, game.away_team)
-        if score_home is None or score_away is None:
-            logger.warning(
-                "Skipping completed event %s: could not parse scores from %r",
-                external_id,
-                scores,
+            game = (
+                Game.query.join(Week, Game.week_id == Week.id)
+                .filter(Game.external_id == external_id, Week.phase == phase)
+                .first()
             )
-            continue
+            if game is None:
+                summary["skipped_unknown"] += 1
+                continue
 
-        game.score_home = score_home
-        game.score_away = score_away
-        game.is_final = True
-        score_game(game)
-        summary["finalized"] += 1
+            if game.is_final:
+                summary["already_final"] += 1
+                continue
+
+            scores = event.get("scores")
+            score_home = _extract_team_score(scores, game.home_team)
+            score_away = _extract_team_score(scores, game.away_team)
+            if score_home is None or score_away is None:
+                logger.warning(
+                    "Skipping completed event %s: could not parse scores from %r",
+                    external_id,
+                    scores,
+                )
+                continue
+
+            game.score_home = score_home
+            game.score_away = score_away
+            game.is_final = True
+            score_game(game)
+            summary["finalized"] += 1
 
     return summary

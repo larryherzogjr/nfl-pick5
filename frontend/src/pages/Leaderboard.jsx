@@ -10,6 +10,14 @@ export default function Leaderboard() {
   const [scope, setScope] = useState("season");
   const [selectedWeekId, setSelectedWeekId] = useState(null);
 
+  const { data: currentWeek } = useQuery({
+    queryKey: ["weeks", "current"],
+    queryFn: async () => (await apiClient.get("/api/weeks/current")).data,
+    retry: false,
+  });
+  const aggregatePhase =
+    currentWeek?.phase === "preseason" ? "preseason" : null;
+
   const {
     data: season,
     isLoading: seasonLoading,
@@ -40,8 +48,9 @@ export default function Leaderboard() {
     if (scope !== "week") return;
     if (!weeks || weeks.length === 0) return;
     if (selectedWeekId && weeks.some((w) => w.id === selectedWeekId)) return;
-    setSelectedWeekId(weeks[0].id);
-  }, [scope, weeks, selectedWeekId]);
+    const initialWeek = weeks.find((w) => w.id === currentWeek?.id) ?? weeks[0];
+    setSelectedWeekId(initialWeek.id);
+  }, [scope, weeks, selectedWeekId, currentWeek?.id]);
 
   const seasonQueryEnabled = scope === "season" && !!season?.id;
   const weekQueryEnabled = scope === "week" && !!selectedWeekId;
@@ -55,12 +64,15 @@ export default function Leaderboard() {
   } = useQuery({
     queryKey:
       scope === "season"
-        ? ["leaderboard", "season", season?.id]
+        ? ["leaderboard", "season", season?.id, aggregatePhase]
         : ["leaderboard", "week", selectedWeekId],
     queryFn: async () => {
       const params =
         scope === "season"
-          ? { season_id: season.id }
+          ? {
+              season_id: season.id,
+              ...(aggregatePhase ? { phase: aggregatePhase } : {}),
+            }
           : { week_id: selectedWeekId };
       const { data } = await apiClient.get("/api/leaderboard", { params });
       return data;
@@ -105,7 +117,7 @@ export default function Leaderboard() {
                   : "bg-white text-slate-700 hover:bg-slate-50"
               }`}
             >
-              Season
+              {aggregatePhase === "preseason" ? "Preseason" : "Season"}
             </button>
             <button
               type="button"

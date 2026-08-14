@@ -398,6 +398,15 @@ SELECT id, year, label, is_active FROM seasons;
 
 Without this, the AdminPanel weeks dropdown shows "No weeks available" and `/api/seasons/active` returns 404.
 
+For the 2026 preseason beta, seed the three verified preseason ranges into the
+same season. This command is idempotent and preseason Week 1 can coexist with
+regular Week 1 because weeks are phase-scoped:
+
+```
+srv-pick5: docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+    run --rm backend flask seed-preseason-weeks 2026
+```
+
 #### Spot-check Week 1 date range
 
 `seed-weeks` computes Week 1 as the Thursday after Labor Day through the following Monday. This is correct in nearly all years, but the NFL occasionally schedules a Wednesday opener (most recently 2026, to accommodate an Australia game on Thursday). If Week 1 has a Wednesday opener that year, the Wednesday game's kickoff will fall outside the seeded date range and the odds refresh will silently skip it with `skipped_no_week: 1`.
@@ -477,7 +486,7 @@ SELECT id, email, is_admin FROM users;
 Back in the browser, navigate to `/admin`. You should see the AdminPanel page (the route checks `user.is_admin`; if it redirects you back to `/`, the update didn't take or session caching is stale — log out and back in).
 
 In the AdminPanel:
-- Select Week 1 in the "Odds & Scoring" section
+- Select the current preseason or regular week in the "Odds & Scoring" section
 - Click "Refresh odds for this week"
 - The summary panel should show `{created: N, updated: 0, ...}` with N being the number of games found for the current upcoming week
 
@@ -493,6 +502,8 @@ Walk through these to confirm production is healthy:
 - [ ] Google OAuth login works
 - [ ] After login, `/` redirects to the current week (`/week/<id>`)
 - [ ] Games render on the week view with spreads
+- [ ] During preseason, the beta banner is visible and the aggregate leaderboard is labeled "Preseason"
+- [ ] Preseason points do not appear in the official season leaderboard
 - [ ] You can make picks and submit (test with 1-2 picks first)
 - [ ] Picks persist across page reload
 - [ ] `/leaderboard` loads (empty until games are graded)

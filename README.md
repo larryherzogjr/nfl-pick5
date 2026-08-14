@@ -33,6 +33,7 @@ cp .env.example .env
 docker compose up -d
 docker compose exec backend flask db upgrade
 docker compose exec backend flask seed-weeks 2026
+docker compose exec backend flask seed-preseason-weeks 2026
 ```
 
 `seed-weeks` creates an inactive regular season. Activate it explicitly after
@@ -85,9 +86,12 @@ drift, and runs the backend tests against PostgreSQL rather than SQLite.
 - A perfect week requires five graded picks and a positive result on all five;
   the number of points alone is not sufficient because push picks are worth two.
 - The Home route uses the active season's current week, falling forward at most
-  two days so Tuesday and Wednesday lead into the next Thursday-starting week.
+  three days so regular-season and preseason gaps lead into the next week.
 - Manual week-scoped odds refreshes update only the selected week. Scheduled
   refreshes remain global.
+- Preseason uses The Odds API's dedicated preseason sport key. Preseason weeks
+  coexist with regular weeks but are excluded from official season standings;
+  the UI exposes separate preseason test standings while preseason is current.
 
 ## Production notes
 
@@ -96,6 +100,7 @@ PostgreSQL ports must remain bound to `127.0.0.1`, `/healthz` must proxy to
 Flask, and avatar uploads require a 6 MB Nginx body limit. See `DEPLOY.md` for
 the full build, migration, backup, permissions, and recovery procedure.
 
-The included seeder creates 18 regular-season weeks. Postseason week rows can
+The regular seeder creates 18 regular-season weeks, and the 2026 preseason
+seeder creates its three published preseason ranges. Postseason week rows can
 be represented by the schema and displayed by the frontend, but automated
 postseason seeding is not currently included.

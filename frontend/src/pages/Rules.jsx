@@ -47,7 +47,8 @@ const RULES = [
   </>,
   <>
     The <strong>season leaderboard</strong> ranks players by{" "}
-    <strong>total points</strong> across all weeks.
+    <strong>total points</strong> across official weeks. Preseason beta results
+    have a separate test leaderboard and do not count toward the season.
   </>,
   <>
     <strong>Tiebreaker:</strong> the player with more{" "}

@@ -22,3 +22,13 @@ test("weekly cells preserve perfect status and include postseason weeks", () => 
   assert.deepEqual(cells[0], { week: 1, points: 6, isPerfect: false });
   assert.deepEqual(cells[18], { week: 19, points: 5, isPerfect: true });
 });
+
+test("preseason standings can render a three-week strip", () => {
+  const cells = buildWeeklyCells(
+    [{ week: 1, points: 4, is_perfect: false }],
+    3,
+  );
+
+  assert.equal(cells.length, 3);
+  assert.deepEqual(cells[0], { week: 1, points: 4, isPerfect: false });
+});

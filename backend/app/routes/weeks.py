@@ -10,7 +10,7 @@ from app.utils.auth_helpers import login_required
 weeks_bp = Blueprint("weeks", __name__, url_prefix="/api")
 
 NFL_TZ = ZoneInfo("America/New_York")
-UPCOMING_WEEK_LOOKAHEAD_DAYS = 2
+UPCOMING_WEEK_LOOKAHEAD_DAYS = 3
 
 
 def _serialize_season(season: Season) -> dict:
@@ -27,6 +27,7 @@ def _serialize_week(week: Week) -> dict:
         "id": week.id,
         "season_id": week.season_id,
         "week_number": week.week_number,
+        "phase": week.phase,
         "label": week.label,
         "start_date": week.start_date.isoformat(),
         "end_date": week.end_date.isoformat(),
@@ -63,9 +64,9 @@ def _serialize_game(game: Game, now: datetime) -> dict:
 def _current_or_upcoming_week(today: date) -> Week | None:
     """Return the active season's current week, or the next week in a short gap.
 
-    Seeded week ranges normally run Thursday through Monday. The two-day
-    lookahead keeps the home page useful on Tuesday and Wednesday without
-    treating a far-future season as current during the offseason.
+    Regular-season week ranges normally run Thursday through Monday, while
+    preseason ranges end Sunday. The three-day lookahead keeps the home page
+    useful through both gaps without treating a far-future season as current.
     """
     season = Season.query.filter_by(is_active=True).one_or_none()
     if season is None:
@@ -112,7 +113,7 @@ def list_weeks():
         return jsonify({"error": "season_id_invalid"}), 400
 
     weeks = (
-        Week.query.filter_by(season_id=season_id).order_by(Week.week_number.asc()).all()
+        Week.query.filter_by(season_id=season_id).order_by(Week.start_date.asc()).all()
     )
     return jsonify([_serialize_week(w) for w in weeks])
 

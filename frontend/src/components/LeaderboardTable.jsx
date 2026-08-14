@@ -41,8 +41,10 @@ function WeeklyBreakdown({ breakdown }) {
         </thead>
         <tbody className="divide-y divide-slate-100">
           {breakdown.map((w) => (
-            <tr key={w.week}>
-              <td className="px-4 py-2 text-slate-700">Week {w.week}</td>
+            <tr key={w.week_id ?? `${w.phase ?? "week"}-${w.week}`}>
+              <td className="px-4 py-2 text-slate-700">
+                {w.label ?? `Week ${w.week}`}
+              </td>
               <td className="px-4 py-2 font-semibold text-slate-900">
                 {w.points}
               </td>

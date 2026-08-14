@@ -13,7 +13,9 @@ from app.routes.auth import _email_belongs_to_another_user
 from app.routes.picks import _replacement_plan
 from app.routes.weeks import _current_or_upcoming_week
 from app.scheduler.run import build_scheduler
-from app.services.score_service import points_for_pick
+from app.services.odds_service import _odds_api_url, refresh_odds
+from app.services.score_service import _scores_api_url, points_for_pick, refresh_scores
+from app.utils.season_phases import PRESEASON_PHASE
 
 
 class TestConfig:
@@ -248,6 +250,15 @@ class PickEndpointTests(unittest.TestCase):
 
         self.assertEqual(resolved.id, self.week.id)
 
+    def test_current_week_falls_forward_across_preseason_monday_gap(self):
+        self.week.start_date = date(2026, 8, 20)
+        self.week.end_date = date(2026, 8, 23)
+        db.session.commit()
+
+        resolved = _current_or_upcoming_week(date(2026, 8, 17))
+
+        self.assertEqual(resolved.id, self.week.id)
+
     def test_current_week_does_not_jump_to_a_far_future_week(self):
         self.week.start_date = date(2026, 9, 10)
         self.week.end_date = date(2026, 9, 14)
@@ -265,6 +276,200 @@ class PickEndpointTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         fn.assert_called_once_with(week_id=self.week.id)
+
+    def test_preseason_weeks_can_share_regular_week_numbers(self):
+        preseason_week = Week(
+            season_id=self.week.season_id,
+            week_number=1,
+            phase=PRESEASON_PHASE,
+            label="Preseason Week 1",
+            start_date=date(2026, 8, 13),
+            end_date=date(2026, 8, 16),
+        )
+        db.session.add(preseason_week)
+        db.session.commit()
+
+        self.assertNotEqual(preseason_week.id, self.week.id)
+
+    def test_preseason_standings_are_isolated_from_official_standings(self):
+        preseason_week = Week(
+            season_id=self.week.season_id,
+            week_number=1,
+            phase=PRESEASON_PHASE,
+            label="Preseason Week 1",
+            start_date=self.now.date(),
+            end_date=self.now.date(),
+        )
+        db.session.add(preseason_week)
+        db.session.flush()
+        preseason_game = Game(
+            week_id=preseason_week.id,
+            external_id="preseason-final",
+            home_team="Kansas City Chiefs",
+            away_team="Buffalo Bills",
+            home_abbr="KC",
+            away_abbr="BUF",
+            kickoff=self.now - timedelta(hours=4),
+            spread_home=Decimal("-3.0"),
+            score_home=24,
+            score_away=20,
+            is_final=True,
+        )
+        db.session.add(preseason_game)
+        db.session.flush()
+        db.session.add(
+            Pick(
+                user_id=self.target.id,
+                game_id=preseason_game.id,
+                picked_side="home",
+                spread_at_pick=Decimal("-3.0"),
+                points_awarded=1,
+            )
+        )
+        db.session.commit()
+        self._login(self.viewer)
+
+        official = self.client.get(f"/api/leaderboard?season_id={self.week.season_id}")
+        preseason = self.client.get(
+            f"/api/leaderboard?season_id={self.week.season_id}&phase=preseason"
+        )
+
+        self.assertEqual(official.status_code, 200)
+        self.assertEqual(official.get_json(), [])
+        self.assertEqual(preseason.status_code, 200)
+        entry = preseason.get_json()[0]
+        self.assertEqual(entry["points"], 1)
+        self.assertEqual(entry["weekly_breakdown"][0]["label"], "Preseason Week 1")
+
+    def test_preseason_odds_refresh_uses_preseason_sport_key(self):
+        preseason_week = Week(
+            season_id=self.week.season_id,
+            week_number=1,
+            phase=PRESEASON_PHASE,
+            label="Preseason Week 1",
+            start_date=self.now.date(),
+            end_date=self.now.date(),
+        )
+        db.session.add(preseason_week)
+        db.session.commit()
+        event = {
+            "id": "preseason-odds",
+            "home_team": "Kansas City Chiefs",
+            "away_team": "Buffalo Bills",
+            "commence_time": (self.now + timedelta(hours=1)).isoformat(),
+            "bookmakers": [
+                {
+                    "key": "fanduel",
+                    "markets": [
+                        {
+                            "key": "spreads",
+                            "outcomes": [
+                                {"name": "Kansas City Chiefs", "point": -2.5},
+                                {"name": "Buffalo Bills", "point": 2.5},
+                            ],
+                        }
+                    ],
+                }
+            ],
+        }
+        response = SimpleNamespace(
+            raise_for_status=lambda: None,
+            json=lambda: [event],
+        )
+        original_key = self.app.config["ODDS_API_KEY"]
+        self.app.config["ODDS_API_KEY"] = "test-key"
+        try:
+            with patch(
+                "app.services.odds_service.requests.get", return_value=response
+            ) as get:
+                summary = refresh_odds(week_id=preseason_week.id)
+        finally:
+            self.app.config["ODDS_API_KEY"] = original_key
+
+        self.assertEqual(summary["created"], 1)
+        self.assertIn("americanfootball_nfl_preseason", get.call_args.args[0])
+        created = Game.query.filter_by(external_id="preseason-odds").one()
+        self.assertEqual(created.week_id, preseason_week.id)
+
+    def test_preseason_score_refresh_uses_preseason_sport_key(self):
+        self.locked_game.is_final = True
+        self.future_game.is_final = True
+        preseason_week = Week(
+            season_id=self.week.season_id,
+            week_number=1,
+            phase=PRESEASON_PHASE,
+            label="Preseason Week 1",
+            start_date=self.now.date(),
+            end_date=self.now.date(),
+        )
+        db.session.add(preseason_week)
+        db.session.flush()
+        preseason_game = Game(
+            week_id=preseason_week.id,
+            external_id="preseason-score",
+            home_team="Kansas City Chiefs",
+            away_team="Buffalo Bills",
+            home_abbr="KC",
+            away_abbr="BUF",
+            kickoff=self.now - timedelta(hours=1),
+            spread_home=Decimal("-3.0"),
+        )
+        db.session.add(preseason_game)
+        db.session.flush()
+        preseason_pick = Pick(
+            user_id=self.target.id,
+            game_id=preseason_game.id,
+            picked_side="home",
+            spread_at_pick=Decimal("-3.0"),
+        )
+        db.session.add(preseason_pick)
+        db.session.commit()
+        event = {
+            "id": "preseason-score",
+            "completed": True,
+            "scores": [
+                {"name": "Kansas City Chiefs", "score": "24"},
+                {"name": "Buffalo Bills", "score": "20"},
+            ],
+        }
+        response = SimpleNamespace(
+            raise_for_status=lambda: None,
+            json=lambda: [event],
+        )
+        original_key = self.app.config["ODDS_API_KEY"]
+        self.app.config["ODDS_API_KEY"] = "test-key"
+        try:
+            with patch(
+                "app.services.score_service.requests.get", return_value=response
+            ) as get:
+                summary = refresh_scores()
+        finally:
+            self.app.config["ODDS_API_KEY"] = original_key
+
+        self.assertEqual(summary["finalized"], 1)
+        self.assertIn("americanfootball_nfl_preseason", get.call_args.args[0])
+        self.assertTrue(preseason_game.is_final)
+        self.assertEqual(preseason_pick.points_awarded, 1)
+
+    def test_preseason_cli_is_idempotent(self):
+        runner = self.app.test_cli_runner()
+
+        first = runner.invoke(args=["seed-preseason-weeks", "2026"])
+        second = runner.invoke(args=["seed-preseason-weeks", "2026"])
+
+        self.assertEqual(first.exit_code, 0, first.output)
+        self.assertEqual(second.exit_code, 0, second.output)
+        weeks = Week.query.filter_by(
+            season_id=self.week.season_id, phase=PRESEASON_PHASE
+        ).all()
+        self.assertEqual(len(weeks), 3)
+
+
+class SeasonPhaseTests(unittest.TestCase):
+    def test_provider_urls_are_phase_aware(self):
+        self.assertIn("americanfootball_nfl_preseason", _odds_api_url("preseason"))
+        self.assertIn("americanfootball_nfl_preseason", _scores_api_url("preseason"))
+        self.assertIn("americanfootball_nfl/odds", _odds_api_url("regular"))
 
 
 class SchedulerTests(unittest.TestCase):

@@ -1,10 +1,10 @@
-# NFL Pick 5 — System Design Document (v2)
+# NFL Pick 5 — System Design Document (v3)
 
 ## Purpose
 
 This document serves as the authoritative design specification for the NFL Pick 5 application. It is intended to be consumed by Claude Code (or any developer) to bootstrap and build the full-stack application from scratch.
 
-**Changes in v2:** Push as a third pick option (double points on whole-number spreads); per-pick spread snapshotting; revised Odds API refresh cadence; separate scheduler container; pick visibility limited to post-kickoff; tiebreaker rules clarified (perfect weeks by count, then co-ranking).
+**Changes in v3:** Preseason weeks are first-class, phase-aware test weeks; preseason odds and scores use their dedicated provider sport key; preseason standings remain separate from official season standings; week navigation supports the three-day preseason gap.
 
 ---
 
@@ -82,12 +82,14 @@ Unique constraint on `(oauth_provider, oauth_subject)`.
 |-------------|--------------|-------------------------------------------|
 | id          | SERIAL (PK)  |                                           |
 | season_id   | INTEGER (FK) | References seasons.id                     |
-| week_number | INTEGER      | 1-18 (regular season) or 19+ for playoffs |
+| week_number | INTEGER      | 1-3 preseason, 1-18 regular, or 19+ legacy playoff numbering |
+| phase       | VARCHAR(12)  | `preseason`, `regular`, or `postseason`    |
 | label       | VARCHAR(30)  | e.g., "Week 1", "Wild Card"               |
 | start_date  | DATE         | First game day of the week (usually Thu)  |
 | end_date    | DATE         | Last game day of the week (usually Mon)   |
 
-Unique constraint on `(season_id, week_number)`.
+Unique constraint on `(season_id, phase, week_number)`, allowing Preseason
+Week 1 and Regular Week 1 to coexist in the same season.
 
 #### `games`
 | Column            | Type          | Notes                                                                              |
@@ -282,7 +284,8 @@ Server validates:
 
 | Method | Path                              | Description                                  |
 |--------|------------------------------------|----------------------------------------------|
-| GET    | /api/leaderboard?season_id=X       | Season standings (points + perfect-weeks)    |
+| GET    | /api/leaderboard?season_id=X       | Official season standings; excludes preseason |
+| GET    | /api/leaderboard?season_id=X&phase=preseason | Aggregate preseason test standings |
 | GET    | /api/leaderboard?week_id=X         | Weekly standings                             |
 
 **Response shape:**
@@ -338,7 +341,8 @@ The spread override endpoint must display a warning that the change affects only
 ### 7.1 The Odds API
 
 - **Docs:** https://the-odds-api.com/liveapi/guides/v4/
-- **Endpoint:** `GET https://api.the-odds-api.com/v4/sports/americanfootball_nfl/odds`
+- **Regular/postseason endpoint:** `GET https://api.the-odds-api.com/v4/sports/americanfootball_nfl/odds`
+- **Preseason endpoint:** `GET https://api.the-odds-api.com/v4/sports/americanfootball_nfl_preseason/odds`
 - **Key params:** `regions=us&markets=spreads&oddsFormat=american`
 - **Auth:** API key passed as `?apiKey=YOUR_KEY`
 - **Free tier:** 500 requests/month
@@ -347,15 +351,20 @@ The spread override endpoint must display a warning that the change affects only
 - APScheduler job runs **once daily** on non-game days (Tuesday, Wednesday, Friday, Saturday)
 - Every 4–6 hours on game days (Thursday, Sunday, Monday) to catch line movement
 - Each refresh upserts games by `external_id` and updates `spread_home` / `spread_updated_at`
+- Week-scoped refreshes select the provider sport key from `week.phase`.
+- Scheduled refreshes request only phases with an active-season week ending now
+  or starting within seven days, avoiding unnecessary dual API polling.
 - Prefer a single bookmaker for consistency (config option, default: `fanduel`)
 - The Odds API does not return team abbreviations; the odds service maps full team names → abbreviations via `backend/app/utils/teams.py`
 
 ### 7.2 Score Ingestion
 
-- **Endpoint:** `GET https://api.the-odds-api.com/v4/sports/americanfootball_nfl/scores`
+- **Endpoint:** Uses `americanfootball_nfl_preseason` for preseason games and
+  `americanfootball_nfl` for regular/postseason games.
 - **Params:** `daysFrom=3`
 - Poll every 30 minutes **only during active game windows** (roughly Thu 8–11pm, Sun 1–11pm, Mon 8–11pm Eastern Time)
 - Run a daily 06:00 ET catch-up so unusual Wednesday/Friday/Saturday games and late finishes are finalized without waiting for the next normal game window
+- Only phases with a recent or imminent unfinished game are polled.
 - When a game is marked complete, update `score_home`, `score_away`, set `is_final = True`, and trigger `score_game()`
 
 **Monthly request budget estimate:** roughly 60–70 spread calls plus 180–190 score calls during a four-week month, below the 500/month free-tier limit.
@@ -407,7 +416,9 @@ that originally created it.
 - **`<PickBar />`** — Sticky bottom bar showing "3 of 5 picks made" with submit button. Allows partial saves with a warning.
 - **`<CountdownTimer />`** — Per-game countdown to kickoff that switches to a locked state when time expires.
 - **`<LeaderboardTable />`** — Server-ranked table with rank (tied players share rank), user, points, and perfect-weeks count. Expandable rows show weekly breakdown or post-kickoff pick details.
-- **`<WeekSelector />`** — Dropdown on the pick screen for direct week navigation, with a warning before discarding unsaved changes.
+- **`<WeekSelector />`** — Chronological dropdown on the pick screen for direct week navigation, with a warning before discarding unsaved changes.
+- A site-wide preseason beta banner states that preseason picks and standings do
+  not count toward the regular season.
 
 ### 9.3 State Management
 
@@ -596,9 +607,12 @@ This application is designed to run on a Docker-capable host. For the developer'
 ### Scheduling and Time-Range Caveats
 
 - `seed-weeks <year>` computes Week 1 as the Thursday after Labor Day through the following Monday. This is correct in nearly all years, but the NFL occasionally schedules a Wednesday opener (most recently 2026) or an international game on Saturday. After seeding, spot-check Week 1's date range against the published NFL schedule and adjust with a manual `UPDATE` if any game's kickoff falls outside the seeded `start_date`/`end_date`. Games outside the range will silently skip during odds refresh with `skipped_no_week`.
-- `/api/weeks/current` uses the current active-season range first, then looks ahead at most two days. This bridges the normal Tuesday/Wednesday gap without redirecting users into a far-future season during the offseason.
+- `/api/weeks/current` uses the current active-season range first, then looks ahead at most three days. This bridges both the regular Tuesday/Wednesday gap and the preseason Monday-Wednesday gap without redirecting users into a far-future season during the offseason.
 - The season created by `seed-weeks` defaults to `is_active = false` (the partial unique index only allows one active season, so auto-activating would risk overwriting in future-year seedings). Mark the season active explicitly: `UPDATE seasons SET is_active = true WHERE year = <year>;`. Without this, the AdminPanel weeks dropdown shows "No weeks available" and `/api/seasons/active` returns 404.
 - The built-in seeder creates 18 regular-season weeks. The schema and frontend can represent week 19+, but postseason rows currently require a separate seeding/operations decision.
+- `seed-preseason-weeks 2026` creates the three verified 2026 preseason ranges.
+  The command fails closed for other years until their published ranges are
+  reviewed and added.
 
 ### Filesystem Permissions for Reverse-Proxied Static Files
 
