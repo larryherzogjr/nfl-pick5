@@ -342,13 +342,16 @@ class PickEndpointTests(unittest.TestCase):
         self.assertEqual(entry["weekly_breakdown"][0]["label"], "Preseason Week 1")
 
     def test_preseason_odds_refresh_uses_preseason_sport_key(self):
+        # A late-evening Eastern kickoff falls on the next UTC date. Keep the
+        # fixture fixed so the test covers that boundary at any CI run time.
+        kickoff = datetime(2026, 8, 14, 1, 0, tzinfo=timezone.utc)
         preseason_week = Week(
             season_id=self.week.season_id,
             week_number=1,
             phase=PRESEASON_PHASE,
             label="Preseason Week 1",
-            start_date=self.now.date(),
-            end_date=self.now.date(),
+            start_date=date(2026, 8, 13),
+            end_date=date(2026, 8, 13),
         )
         db.session.add(preseason_week)
         db.session.commit()
@@ -356,7 +359,7 @@ class PickEndpointTests(unittest.TestCase):
             "id": "preseason-odds",
             "home_team": "Kansas City Chiefs",
             "away_team": "Buffalo Bills",
-            "commence_time": (self.now + timedelta(hours=1)).isoformat(),
+            "commence_time": kickoff.isoformat(),
             "bookmakers": [
                 {
                     "key": "fanduel",
