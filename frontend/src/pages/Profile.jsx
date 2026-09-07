@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import apiClient from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import TopNav from "../components/TopNav";
+import PageHeader from "../components/PageHeader";
 import LoadingState from "../components/LoadingState";
 import ErrorState from "../components/ErrorState";
 import { buildWeeklyCells, perfectWeekCount } from "../utils/standings";
@@ -338,7 +339,7 @@ function StatTile({ label, value }) {
       <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
         {label}
       </div>
-      <div className="mt-1 text-2xl font-bold text-slate-900">{value}</div>
+      <div className="mt-1 font-display text-4xl text-slate-900">{value}</div>
     </div>
   );
 }
@@ -698,6 +699,11 @@ export default function Profile() {
   return (
     <div className="min-h-screen bg-slate-50">
       <TopNav />
+      <PageHeader
+        eyebrow="NFL Pick 5 · Profile"
+        title="Your season."
+        description="Your picks, your points, your place in the standings."
+      />
       <main className="mx-auto max-w-5xl px-4 py-8">
         {user && (
           <>

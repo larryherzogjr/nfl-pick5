@@ -5,6 +5,7 @@ import apiClient from "../api/client";
 import TopNav from "../components/TopNav";
 import LoadingState from "../components/LoadingState";
 import ErrorState from "../components/ErrorState";
+import PageHeader from "../components/PageHeader";
 
 export default function Home() {
   const navigate = useNavigate();
@@ -32,6 +33,11 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-slate-50">
       <TopNav />
+      <PageHeader
+        eyebrow="NFL Pick 5"
+        title="Your week. Your five."
+        description="Pick against the spread. Each game locks at kickoff."
+      />
       <main className="mx-auto max-w-3xl px-4 py-12">
         {isLoading && <LoadingState label="Finding the current week…" />}
         {noActiveWeek && (

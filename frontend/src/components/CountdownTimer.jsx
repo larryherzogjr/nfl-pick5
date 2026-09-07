@@ -25,14 +25,14 @@ export default function CountdownTimer({ kickoff }) {
 
   if (remaining <= 0) {
     return (
-      <span className="rounded bg-red-100 px-2 py-1 text-xs font-semibold text-red-700">
+      <span className="rounded bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">
         LOCKED
       </span>
     );
   }
   return (
-    <span className="font-mono text-xs text-slate-600">
-      {formatRemaining(remaining)}
+    <span className="text-xs tabular-nums text-slate-500">
+      Locks in {formatRemaining(remaining)}
     </span>
   );
 }

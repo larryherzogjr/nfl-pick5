@@ -5,6 +5,7 @@ import TopNav from "../components/TopNav";
 import LeaderboardTable from "../components/LeaderboardTable";
 import LoadingState from "../components/LoadingState";
 import ErrorState from "../components/ErrorState";
+import PageHeader from "../components/PageHeader";
 
 export default function Leaderboard() {
   const [scope, setScope] = useState("season");
@@ -92,14 +93,12 @@ export default function Leaderboard() {
   return (
     <div className="min-h-screen bg-slate-50">
       <TopNav />
-      <main className="mx-auto max-w-5xl px-4 py-8">
-        <header className="mb-6">
-          <h1 className="text-2xl font-bold text-slate-900">Leaderboard</h1>
-          {season?.label && (
-            <p className="mt-1 text-sm text-slate-500">{season.label} season</p>
-          )}
-        </header>
-
+      <PageHeader
+        eyebrow={`NFL Pick 5${season?.label ? ` · ${season.label}` : ""}`}
+        title="The standings."
+        description="Every pick counts. See who’s leading the field."
+      />
+      <main className="mx-auto max-w-5xl px-4 py-7 sm:px-7">
         <div className="mb-6 flex flex-wrap items-center gap-3">
           <div
             className="inline-flex rounded-md ring-1 ring-slate-300"

@@ -1,3 +1,67 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-cream text-slate-900 antialiased;
+  }
+  :focus-visible {
+    outline: 3px solid #b47c12;
+    outline-offset: 3px;
+  }
+  button,
+  a,
+  select,
+  input {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+@layer components {
+  .field-banner {
+    @apply relative isolate overflow-hidden bg-field text-white;
+  }
+  .field-banner::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    inset: 0 -30px 0 65%;
+    opacity: 0.14;
+    background: repeating-linear-gradient(
+      90deg,
+      transparent 0 58px,
+      white 58px 60px
+    );
+    transform: skewX(-12deg);
+    pointer-events: none;
+  }
+  .page-title {
+    @apply font-display text-4xl uppercase tracking-wide sm:text-5xl;
+    line-height: 1.1;
+  }
+  .eyebrow {
+    @apply text-xs font-bold uppercase tracking-[0.16em];
+  }
+  .pick-button {
+    @apply min-h-[48px] min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-2 py-3 text-sm font-bold text-slate-900 transition-colors hover:bg-slate-50;
+  }
+  .pick-button[aria-pressed="true"] {
+    @apply border-field bg-field text-white;
+  }
+  .pick-button:disabled {
+    @apply cursor-not-allowed bg-slate-50 text-slate-500;
+  }
+  .pick-button:disabled[aria-pressed="true"] {
+    @apply border-field bg-field text-white;
+  }
+  .pick-footer {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+  .standings-table th {
+    @apply whitespace-nowrap text-[11px] font-bold tracking-wider;
+  }
+  .standings-table td {
+    @apply tabular-nums;
+  }
+}

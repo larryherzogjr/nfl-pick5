@@ -412,8 +412,8 @@ that originally created it.
 
 ### 9.2 Key Components
 
-- **`<GameCard />`** — Displays matchup, current market spread, kickoff time, and pick toggle. The toggle shows three options when the current spread is a whole integer (`home`, `away`, `push (2x)`) or two options on half-point spreads. Shows "LOCKED" state post-kickoff. Highlights the user's current pick and displays the user's snapshotted spread alongside if it differs from the current market line.
-- **`<PickBar />`** — Sticky bottom bar showing "3 of 5 picks made" with submit button. Allows partial saves with a warning.
+- **`<GameCard />`** — Displays team logos, matchup, local kickoff time, team-and-spread pick buttons, and final scores. Unlocked buttons use the current market line; locked picks display their saved line and retain the push option when the saved line was whole. Saved lines and graded points remain visible. The client disables picking at kickoff; the server remains authoritative.
+- **`<PickBar />`** — Sticky bottom bar with five progress segments, selected count, persistent save status, and a gold "Save picks" button. Allows partial saves with a warning. A sixth selection explains how to free an unlocked spot. Controls pause during submission and save refresh.
 - **`<CountdownTimer />`** — Per-game countdown to kickoff that switches to a locked state when time expires.
 - **`<LeaderboardTable />`** — Server-ranked table with rank (tied players share rank), user, points, and perfect-weeks count. Expandable rows show weekly breakdown or post-kickoff pick details.
 - **`<WeekSelector />`** — Chronological dropdown on the pick screen for direct week navigation, with a warning before discarding unsaved changes.
@@ -424,6 +424,23 @@ that originally created it.
 
 - Use React Context for auth state (`currentUser`)
 - Use React Query (TanStack Query) for server state (games, picks, leaderboard), caching, and refetching after mutations.
+
+### 9.4 Visual Design and Team Graphics
+
+- Field green (`#174b38`), a dark green navigation bar (`#102e24`), cream
+  (`#f5f3ed`), white game cards, and gold (`#f1c86a`) primary actions.
+- Condensed display headings and team abbreviations, subtle field markings in
+  page headers, and readable Arial body text. Matchups use two columns on desktop
+  and one on phones. The pick bar respects device safe-area insets.
+- Team graphics come from ESPN’s public NFL team directory:
+  `https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams`.
+  All 32 PNGs are served locally from `frontend/public/team-logos`, with explicit
+  paths in `frontend/src/utils/teams.js` keyed by the backend abbreviations.
+  Logos fall back to a text monogram on failure. Team names remain visible
+  independently of the decorative images. Source information is recorded beside
+  the assets; graphics remain the property of their respective owners.
+- Main navigation identifies the current page. Standings emphasize ranks and
+  points, highlight the current player, and provide keyboard-accessible expansion.
 
 ---
 

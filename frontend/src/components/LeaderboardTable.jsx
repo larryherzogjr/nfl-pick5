@@ -1,6 +1,7 @@
 import { Fragment, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import apiClient from "../api/client";
+import { useAuth } from "../context/AuthContext";
 
 function Avatar({ url, name }) {
   const initial = (name || "?").trim().charAt(0).toUpperCase();
@@ -150,6 +151,7 @@ function PlayerPicks({ userId, weekId }) {
 
 export default function LeaderboardTable({ entries, selectedWeekId = null }) {
   const [expandedUserId, setExpandedUserId] = useState(null);
+  const { user } = useAuth();
 
   if (!entries || entries.length === 0) {
     return (
@@ -160,7 +162,9 @@ export default function LeaderboardTable({ entries, selectedWeekId = null }) {
         <h2 className="text-base font-semibold text-slate-900">
           No graded picks yet
         </h2>
-        <p className="mt-1 text-sm text-slate-600">Check back after Sunday.</p>
+        <p className="mt-1 text-sm text-slate-600">
+          Standings appear as games are finalized.
+        </p>
       </div>
     );
   }
@@ -172,9 +176,9 @@ export default function LeaderboardTable({ entries, selectedWeekId = null }) {
   return (
     <div className="overflow-hidden rounded-lg bg-white shadow-sm ring-1 ring-slate-200">
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-slate-200">
-          <thead className="bg-slate-50">
-            <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
+        <table className="standings-table min-w-full divide-y divide-slate-200">
+          <thead className="bg-field-dark">
+            <tr className="text-left text-xs uppercase tracking-wide text-white/90">
               <th scope="col" className="px-4 py-3 font-medium">
                 Rank
               </th>
@@ -201,10 +205,14 @@ export default function LeaderboardTable({ entries, selectedWeekId = null }) {
                   <tr
                     onClick={() => toggleRow(entry.user.id)}
                     className={`cursor-pointer transition-colors ${
-                      isExpanded ? "bg-slate-50" : "hover:bg-slate-50"
+                      entry.user.id === user?.id
+                        ? "bg-amber-50"
+                        : isExpanded
+                          ? "bg-slate-50"
+                          : "hover:bg-slate-50"
                     }`}
                   >
-                    <td className="whitespace-nowrap px-4 py-3 font-semibold text-slate-900">
+                    <td className="whitespace-nowrap px-4 py-3 font-display text-2xl text-slate-900">
                       {entry.rank}
                     </td>
                     <td className="px-4 py-3">
@@ -213,16 +221,35 @@ export default function LeaderboardTable({ entries, selectedWeekId = null }) {
                           url={entry.user.avatar_url}
                           name={entry.user.display_name}
                         />
-                        <span className="font-medium text-slate-900">
+                        <button
+                          type="button"
+                          aria-expanded={isExpanded}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            toggleRow(entry.user.id);
+                          }}
+                          className="min-h-[44px] text-left text-sm font-semibold text-slate-900"
+                        >
                           {entry.user.display_name}
-                        </span>
+                          {entry.user.id === user?.id && (
+                            <span className="ml-2 text-xs font-normal text-slate-600">
+                              You
+                            </span>
+                          )}
+                        </button>
                       </div>
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right font-semibold text-slate-900">
+                    <td className="whitespace-nowrap px-4 py-3 text-right font-display text-3xl text-slate-900">
                       {entry.points}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-right text-slate-700">
-                      {entry.perfect_weeks}
+                      {entry.perfect_weeks > 0 ? (
+                        <span className="rounded bg-amber-100 px-2 py-1 font-semibold text-amber-900">
+                          ★ {entry.perfect_weeks}
+                        </span>
+                      ) : (
+                        "—"
+                      )}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-right text-slate-700">
                       {entry.total_picked}

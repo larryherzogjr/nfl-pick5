@@ -8,6 +8,7 @@ import PickBar from "../components/PickBar";
 import LoadingState from "../components/LoadingState";
 import ErrorState from "../components/ErrorState";
 import WeekSelector from "../components/WeekSelector";
+import PageHeader from "../components/PageHeader";
 
 const PICK_ERROR_MESSAGES = {
   game_not_in_week: "Game is not part of this week.",
@@ -86,12 +87,14 @@ export default function WeekView() {
   const [selected, setSelected] = useState({});
   const [successVisible, setSuccessVisible] = useState(false);
   const [submitErrors, setSubmitErrors] = useState([]);
+  const [selectionNotice, setSelectionNotice] = useState("");
   const successTimerRef = useRef(null);
 
   useEffect(() => {
     setSelected({});
     setSubmitErrors([]);
     setSuccessVisible(false);
+    setSelectionNotice("");
   }, [weekIdNum]);
 
   useEffect(() => {
@@ -169,9 +172,10 @@ export default function WeekView() {
       );
       return data;
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       setSubmitErrors([]);
-      queryClient.invalidateQueries({ queryKey: picksQueryKey });
+      setSelectionNotice("");
+      await queryClient.invalidateQueries({ queryKey: picksQueryKey });
       setSuccessVisible(true);
       if (successTimerRef.current) clearTimeout(successTimerRef.current);
       successTimerRef.current = setTimeout(() => {
@@ -190,6 +194,17 @@ export default function WeekView() {
   });
 
   const handlePickChange = (gameId, side) => {
+    if (submitMutation.isPending) return;
+    if (
+      !Object.prototype.hasOwnProperty.call(selected, gameId) &&
+      pickCount >= 5
+    ) {
+      setSelectionNotice(
+        "All five spots are filled. Deselect an unlocked pick to choose another.",
+      );
+      return;
+    }
+    setSelectionNotice("");
     setSelected((prev) => {
       if (prev[gameId] === side) {
         const next = { ...prev };
@@ -231,27 +246,29 @@ export default function WeekView() {
   );
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-24">
+    <div className="min-h-screen bg-slate-50 pb-40">
       <TopNav />
-      <main className="mx-auto max-w-3xl px-4 py-6">
-        <header className="mb-4 flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">
-              {week?.label ?? `Week ${weekId}`}
-            </h1>
-            {season?.label && (
-              <p className="mt-1 text-sm text-slate-500">
-                {season.label} season
-              </p>
-            )}
-          </div>
+      <PageHeader
+        eyebrow={`NFL Pick 5 · ${week?.label ?? "Your picks"}${season?.label ? ` · ${season.label}` : ""}`}
+        title="Your week. Your five."
+        description="Pick against the spread. Each game locks at kickoff."
+      >
+        <div className="rounded-md bg-white p-2">
           <WeekSelector
             weeks={weeks}
             value={week?.id ?? weekIdNum}
             onChange={handleWeekChange}
-            disabled={!weekIdValid}
+            disabled={!weekIdValid || submitMutation.isPending}
           />
-        </header>
+        </div>
+      </PageHeader>
+      <main className="mx-auto max-w-5xl px-4 py-6 sm:px-7">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <h2 className="eyebrow">The matchups</h2>
+          <span className="text-xs text-slate-500">
+            Kickoff times in your local timezone
+          </span>
+        </div>
 
         {successVisible && (
           <div className="mb-4 rounded-md bg-green-50 p-3 text-sm font-medium text-green-800 ring-1 ring-green-200">
@@ -333,7 +350,7 @@ export default function WeekView() {
           )}
 
         {weekIdValid && games && games.length > 0 && (
-          <div className="space-y-3">
+          <div className="grid gap-4 md:grid-cols-2">
             {games.map((game) => (
               <GameCard
                 key={game.id}
@@ -341,6 +358,9 @@ export default function WeekView() {
                 currentPick={picksByGame[game.id] ?? null}
                 selectedSide={selected[game.id] ?? null}
                 onPickChange={(side) => handlePickChange(game.id, side)}
+                isSaving={
+                  submitMutation.isPending || picksLoading || picksIsError
+                }
               />
             ))}
           </div>
@@ -352,6 +372,14 @@ export default function WeekView() {
         onSubmit={handleSubmit}
         isSubmitting={submitMutation.isPending}
         isDirty={isDirty}
+        disabled={
+          !weekIdValid ||
+          gamesLoading ||
+          picksLoading ||
+          gamesIsError ||
+          picksIsError
+        }
+        notice={selectionNotice}
       />
     </div>
   );

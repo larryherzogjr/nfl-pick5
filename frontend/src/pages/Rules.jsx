@@ -1,6 +1,8 @@
 import { Link } from "react-router-dom";
 import TopNav from "../components/TopNav";
 import { useAuth } from "../context/AuthContext";
+import Brand from "../components/Brand";
+import PageHeader from "../components/PageHeader";
 
 const RULES = [
   <>
@@ -64,11 +66,9 @@ const RULES = [
 
 function PublicHeader() {
   return (
-    <nav className="border-b border-slate-200 bg-white">
-      <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
-        <Link to="/" className="text-lg font-semibold text-slate-900">
-          NFL Pick 5
-        </Link>
+    <nav className="bg-field-dark">
+      <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4 sm:px-7">
+        <Brand />
         <Link
           to="/login"
           className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
@@ -86,13 +86,12 @@ export default function Rules() {
   return (
     <div className="min-h-screen bg-slate-50">
       {isAuthenticated ? <TopNav /> : <PublicHeader />}
+      <PageHeader
+        eyebrow="NFL Pick 5 · The playbook"
+        title="Know the game."
+        description="Five picks. Every week. Here’s how it works."
+      />
       <main className="mx-auto max-w-3xl px-4 py-8">
-        <header className="mb-6">
-          <h1 className="text-2xl font-bold text-slate-900">Rules</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            How NFL Pick 5 works, in ten rules.
-          </p>
-        </header>
         <ol className="space-y-4">
           {RULES.map((rule, idx) => (
             <li

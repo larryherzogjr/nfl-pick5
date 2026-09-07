@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import apiClient from "../api/client";
 import TopNav from "../components/TopNav";
+import PageHeader from "../components/PageHeader";
 import LoadingState from "../components/LoadingState";
 import ErrorState from "../components/ErrorState";
 
@@ -521,19 +522,16 @@ export default function AdminPanel() {
   return (
     <div className="min-h-screen bg-slate-50">
       <TopNav />
+      <PageHeader
+        eyebrow={`NFL Pick 5${season?.label ? ` · ${season.label}` : ""}`}
+        title="Admin panel."
+      />
       <div className="border-b border-amber-300 bg-amber-200 text-amber-900">
         <div className="mx-auto max-w-5xl px-4 py-2 text-sm font-semibold uppercase tracking-wide">
           ⚠ Admin Panel — actions here affect all users
         </div>
       </div>
       <main className="mx-auto max-w-5xl px-4 py-8 space-y-10">
-        <header>
-          <h1 className="text-2xl font-bold text-slate-900">Admin Panel</h1>
-          {season?.label && (
-            <p className="mt-1 text-sm text-slate-500">{season.label} season</p>
-          )}
-        </header>
-
         <section className="rounded-lg bg-white p-5 shadow-sm ring-1 ring-slate-200">
           <h2 className="text-lg font-semibold text-slate-900">
             Odds &amp; Scoring

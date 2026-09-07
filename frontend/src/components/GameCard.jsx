@@ -1,52 +1,29 @@
+import { useEffect, useState } from "react";
 import CountdownTimer from "./CountdownTimer";
+import TeamLogo from "./TeamLogo";
 
 function formatKickoff(iso) {
   return new Intl.DateTimeFormat(undefined, {
     weekday: "short",
+    month: "short",
+    day: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    timeZoneName: "short",
   }).format(new Date(iso));
 }
-
 function formatSpread(spread) {
-  if (spread === null || spread === undefined) return "—";
+  if (spread == null) return "—";
   if (spread === 0) return "PK";
   return spread > 0 ? `+${spread}` : `${spread}`;
 }
-
 function formatPickLine(pick, game) {
-  const homeSpread = pick.spread_at_pick;
-  if (pick.picked_side === "push") {
-    return `Push ${formatSpread(homeSpread)}`;
-  }
-  if (pick.picked_side === "home") {
-    return `${game.home_abbr} ${formatSpread(homeSpread)}`;
-  }
-  const awaySpread = homeSpread === 0 ? 0 : -homeSpread;
-  return `${game.away_abbr} ${formatSpread(awaySpread)}`;
-}
-
-function pointsBadge(points) {
-  if (points === 2)
-    return { text: "✓ 2 pts", className: "bg-green-100 text-green-800" };
-  if (points === 1)
-    return { text: "✓ 1 pt", className: "bg-green-100 text-green-800" };
-  return { text: "✗ 0 pts", className: "bg-red-100 text-red-700" };
-}
-
-function buttonClass(selected, locked) {
-  const base =
-    "flex-1 min-h-[44px] rounded-md border px-3 py-3 text-sm font-medium transition select-none";
-  if (locked) {
-    if (selected) {
-      return `${base} cursor-not-allowed border-slate-300 bg-slate-200 text-slate-500`;
-    }
-    return `${base} cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400`;
-  }
-  if (selected) {
-    return `${base} border-slate-900 bg-slate-900 text-white`;
-  }
-  return `${base} border-slate-300 bg-white text-slate-700 hover:bg-slate-50 active:bg-slate-100`;
+  const line = pick.spread_at_pick;
+  if (pick.picked_side === "push")
+    return `Push · ${game.home_abbr} ${formatSpread(line)}`;
+  return pick.picked_side === "home"
+    ? `${game.home_abbr} ${formatSpread(line)}`
+    : `${game.away_abbr} ${formatSpread(line == null ? null : -line)}`;
 }
 
 export default function GameCard({
@@ -54,82 +31,130 @@ export default function GameCard({
   currentPick,
   selectedSide,
   onPickChange,
+  isSaving = false,
 }) {
   const kickoffMs = new Date(game.kickoff).getTime();
-  const locked = game.is_locked || Date.now() >= kickoffMs;
-  const spread = game.spread_home;
-  const isWholeSpread =
-    spread !== null && spread !== undefined && Number.isInteger(spread);
-
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    const remaining = kickoffMs - Date.now();
+    if (remaining <= 0) return;
+    // Long delays exceed browser timer limits; reschedule until kickoff.
+    const timer = setTimeout(
+      () => setNow(Date.now()),
+      Math.min(remaining + 25, 2_147_483_647),
+    );
+    return () => clearTimeout(timer);
+  }, [kickoffMs, now]);
+  const locked = game.is_locked || game.is_final || now >= kickoffMs;
+  const currentSpread = game.spread_home;
+  const spread =
+    locked && currentPick?.spread_at_pick != null
+      ? currentPick.spread_at_pick
+      : currentSpread;
+  const hasLine = spread != null;
   const buttons = [
-    { side: "away", label: "Away" },
-    { side: "home", label: "Home" },
+    {
+      side: "away",
+      label: `${game.away_abbr} ${formatSpread(hasLine ? -spread : null)}`,
+    },
+    { side: "home", label: `${game.home_abbr} ${formatSpread(spread)}` },
   ];
-  if (isWholeSpread) {
-    buttons.push({ side: "push", label: "Push (2x)" });
-  }
-
-  const hasGrade =
-    currentPick &&
-    currentPick.points_awarded !== null &&
-    currentPick.points_awarded !== undefined;
-  const badge = hasGrade ? pointsBadge(currentPick.points_awarded) : null;
-
+  if (
+    (hasLine && Number.isInteger(spread)) ||
+    (locked && currentPick?.picked_side === "push")
+  )
+    buttons.push({ side: "push", label: "Push · 2 pts" });
+  const hasGrade = currentPick?.points_awarded != null;
+  const points = currentPick?.points_awarded;
+  const hasScores =
+    game.is_final && game.score_away != null && game.score_home != null;
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="flex items-start justify-between gap-3">
+    <article
+      className="flex h-full flex-col rounded-lg border border-slate-200 bg-white p-4 sm:p-5"
+      aria-label={`${game.away_team} at ${game.home_team}`}
+    >
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+        <time dateTime={game.kickoff}>{formatKickoff(game.kickoff)}</time>
+        {locked ? (
+          <span className="rounded bg-slate-100 px-2 py-1 font-bold uppercase tracking-wide text-slate-600">
+            {game.is_final ? "Final" : "Locked"}
+          </span>
+        ) : (
+          <CountdownTimer kickoff={game.kickoff} />
+        )}
+      </div>
+      <div className="flex items-center justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <div className="text-base font-semibold text-slate-900">
-            <span className="text-slate-500">{game.away_abbr}</span>{" "}
-            <span className="font-normal text-slate-400">@</span>{" "}
-            <span>{game.home_abbr}</span>
-          </div>
-          <div className="mt-0.5 truncate text-xs text-slate-500">
-            {game.away_team} @ {game.home_team}
-          </div>
-          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-600">
-            <span>{formatKickoff(game.kickoff)}</span>
-            <span className="font-medium text-slate-800">
-              {game.home_abbr} {formatSpread(spread)}
-            </span>
-            {currentPick?.spread_at_pick != null && (
-              <span className="text-xs font-medium text-slate-500">
-                Saved line: {formatPickLine(currentPick, game)}
-              </span>
+          <TeamLogo abbreviation={game.away_abbr} />
+          <div className="mt-2 font-display text-3xl tracking-wide">
+            {game.away_abbr}
+            {hasScores && (
+              <span className="ml-3 tabular-nums">{game.score_away}</span>
             )}
           </div>
+          <div className="mt-1 text-xs text-slate-500">{game.away_team}</div>
         </div>
-        <div className="flex shrink-0 flex-col items-end gap-2">
-          {locked ? (
-            <span className="rounded bg-red-100 px-2 py-1 text-xs font-semibold text-red-700">
-              LOCKED
-            </span>
-          ) : (
-            <CountdownTimer kickoff={game.kickoff} />
-          )}
-          {badge && (
-            <span
-              className={`rounded-full px-2 py-1 text-xs font-medium ${badge.className}`}
+        <span className="text-xs font-medium text-slate-500">AT</span>
+        <div className="flex min-w-0 flex-1 flex-col items-end text-right">
+          <TeamLogo abbreviation={game.home_abbr} />
+          <div className="mt-2 font-display text-3xl tracking-wide">
+            {hasScores && (
+              <span className="mr-3 tabular-nums">{game.score_home}</span>
+            )}
+            {game.home_abbr}
+          </div>
+          <div className="mt-1 text-xs text-slate-500">{game.home_team}</div>
+        </div>
+      </div>
+      <div className="mt-auto pt-5">
+        <div
+          className="flex gap-2"
+          role="group"
+          aria-label={`Pick ${game.away_abbr} at ${game.home_abbr}`}
+        >
+          {buttons.map((button) => (
+            <button
+              key={button.side}
+              type="button"
+              disabled={locked || !hasLine || isSaving}
+              aria-pressed={selectedSide === button.side}
+              onClick={() => {
+                if (!game.is_locked && Date.now() < kickoffMs)
+                  onPickChange(button.side);
+              }}
+              className="pick-button"
             >
-              {badge.text}
+              {selectedSide === button.side && (
+                <span aria-hidden="true">✓ </span>
+              )}
+              {button.label}
+            </button>
+          ))}
+        </div>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+          <span>
+            {currentPick
+              ? `Saved line: ${formatPickLine(currentPick, game)}`
+              : locked
+                ? "No pick for this game"
+                : hasLine
+                  ? "Current line · saved on submission"
+                  : "Waiting for a line"}
+          </span>
+          {hasGrade && (
+            <span
+              className={`rounded px-2 py-1 font-bold ${points > 0 ? "bg-green-100 text-green-800" : "bg-red-50 text-red-700"}`}
+            >
+              {points > 0 ? "✓" : "✗"} {points} {points === 1 ? "pt" : "pts"}
             </span>
           )}
         </div>
+        {!locked && hasLine && Number.isInteger(spread) && (
+          <p className="mt-2 text-xs text-slate-500">
+            Push scores 2 points if the game lands on the line.
+          </p>
+        )}
       </div>
-
-      <div className="mt-3 flex gap-2">
-        {buttons.map((b) => (
-          <button
-            key={b.side}
-            type="button"
-            disabled={locked}
-            onClick={() => onPickChange(b.side)}
-            className={buttonClass(selectedSide === b.side, locked)}
-          >
-            {b.label}
-          </button>
-        ))}
-      </div>
-    </div>
+    </article>
   );
 }
