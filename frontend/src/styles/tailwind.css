@@ -58,6 +58,18 @@
   .pick-footer {
     padding-bottom: max(1rem, env(safe-area-inset-bottom));
   }
+  .admin-section {
+    @apply min-w-0 scroll-mt-5 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6;
+  }
+  .admin-input {
+    @apply min-h-[44px] rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-field focus:ring-1 focus:ring-field;
+  }
+  .admin-button-primary {
+    @apply min-h-[44px] rounded-md border border-gold bg-gold px-4 py-2 text-sm font-bold text-field-dark transition-colors hover:border-amber-300 hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-60;
+  }
+  .admin-button-secondary {
+    @apply min-h-[44px] rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-field transition-colors hover:border-field hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60;
+  }
   .standings-table th {
     @apply whitespace-nowrap text-[11px] font-bold tracking-wider;
   }
