@@ -15,6 +15,7 @@ from app.routes.weeks import _current_or_upcoming_week
 from app.scheduler.run import build_scheduler
 from app.services.odds_service import _odds_api_url, refresh_odds
 from app.services.score_service import _scores_api_url, points_for_pick, refresh_scores
+from app.services.team_record_service import records_before_games
 from app.utils.season_phases import PRESEASON_PHASE
 
 
@@ -204,6 +205,99 @@ class PickEndpointTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.get_json()["picks"]), 2)
+
+    def test_matchup_records_include_only_finals_before_kickoff(self):
+        previous = self._game(
+            "previous",
+            self.future_game.kickoff - timedelta(days=2),
+            "GB",
+            "CHI",
+        )
+        previous.score_home = 24
+        previous.score_away = 20
+        previous.is_final = True
+        later = self._game(
+            "later",
+            self.future_game.kickoff + timedelta(days=1),
+            "GB",
+            "CHI",
+        )
+        later.score_home = 10
+        later.score_away = 20
+        later.is_final = True
+        db.session.add_all([previous, later])
+        db.session.commit()
+
+        records = records_before_games([self.future_game])[self.future_game.id]
+
+        self.assertEqual(records["home_record"], "1-0")
+        self.assertEqual(records["away_record"], "0-1")
+
+    def test_game_and_pick_payloads_include_matchup_records(self):
+        previous = self._game(
+            "previous",
+            self.future_game.kickoff - timedelta(days=2),
+            "GB",
+            "CHI",
+        )
+        previous.score_home = 21
+        previous.score_away = 21
+        previous.is_final = True
+        db.session.add(previous)
+        db.session.commit()
+        self._login(self.target)
+
+        games_response = self.client.get(f"/api/weeks/{self.week.id}/games")
+        picks_response = self.client.get(
+            f"/api/users/{self.target.id}/weeks/{self.week.id}/picks"
+        )
+
+        game = next(
+            item
+            for item in games_response.get_json()
+            if item["id"] == self.future_game.id
+        )
+        pick = next(
+            item
+            for item in picks_response.get_json()["picks"]
+            if item["game_id"] == self.future_game.id
+        )
+        self.assertEqual(game["home_record"], "0-0-1")
+        self.assertEqual(game["away_record"], "0-0-1")
+        self.assertEqual(pick["home_record"], "0-0-1")
+        self.assertEqual(pick["away_record"], "0-0-1")
+
+    def test_preseason_results_do_not_change_regular_season_records(self):
+        preseason_week = Week(
+            season_id=self.week.season_id,
+            week_number=1,
+            phase=PRESEASON_PHASE,
+            label="Preseason Week 1",
+            start_date=self.now.date() - timedelta(days=30),
+            end_date=self.now.date() - timedelta(days=27),
+        )
+        db.session.add(preseason_week)
+        db.session.flush()
+        preseason = Game(
+            week_id=preseason_week.id,
+            external_id="preseason-record",
+            home_team="GB Home",
+            away_team="CHI Away",
+            home_abbr="GB",
+            away_abbr="CHI",
+            kickoff=self.future_game.kickoff - timedelta(days=30),
+            spread_home=Decimal("-3.0"),
+            score_home=24,
+            score_away=20,
+            is_final=True,
+        )
+        db.session.add(preseason)
+        db.session.commit()
+
+        records = records_before_games([self.future_game])[self.future_game.id]
+
+        self.assertEqual(records["home_record"], "0-0")
+        self.assertEqual(records["away_record"], "0-0")
 
     def test_weekly_leaderboard_lists_players_with_visible_ungraded_picks(self):
         self._login(self.viewer)

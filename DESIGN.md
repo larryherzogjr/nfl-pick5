@@ -253,6 +253,12 @@ identified by the `pick5_session` cookie.
 | GET    | /api/weeks/current            | Get the active season's current week; look ahead up to two days between seeded week ranges |
 | GET    | /api/weeks/:id/games          | List all games for a week with spreads   |
 
+Game and pick matchup payloads include `home_record` and `away_record` as
+W-L or W-L-T strings. They are derived from final games already stored for the
+season, include only results before that matchup's kickoff, and therefore do
+not require another external API request. Preseason records are isolated;
+regular and postseason results share the official-season record.
+
 ### 6.3 Picks
 
 | Method | Path                          | Description                              |

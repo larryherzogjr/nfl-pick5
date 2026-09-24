@@ -5,6 +5,7 @@ from flask import Blueprint, jsonify, request
 
 from app import db
 from app.models import Game, Season, Week
+from app.services.team_record_service import records_before_games
 from app.utils.auth_helpers import login_required
 
 weeks_bp = Blueprint("weeks", __name__, url_prefix="/api")
@@ -34,7 +35,13 @@ def _serialize_week(week: Week) -> dict:
     }
 
 
-def _serialize_game(game: Game, now: datetime) -> dict:
+def _serialize_game(game: Game, now: datetime, records: dict[str, str]) -> dict:
+    # PostgreSQL preserves timezone awareness; SQLite (used by tests and some
+    # local setups) does not. Compare like-for-like while retaining UTC in
+    # production.
+    comparison_now = (
+        now if game.kickoff.tzinfo is not None else now.replace(tzinfo=None)
+    )
     return {
         "id": game.id,
         "week_id": game.week_id,
@@ -43,6 +50,8 @@ def _serialize_game(game: Game, now: datetime) -> dict:
         "away_team": game.away_team,
         "home_abbr": game.home_abbr,
         "away_abbr": game.away_abbr,
+        "home_record": records["home_record"],
+        "away_record": records["away_record"],
         "kickoff": game.kickoff.isoformat(),
         "spread_home": (
             float(game.spread_home) if game.spread_home is not None else None
@@ -57,7 +66,7 @@ def _serialize_game(game: Game, now: datetime) -> dict:
         "score_away": game.score_away,
         "is_final": game.is_final,
         "admin_override": game.admin_override,
-        "is_locked": game.kickoff <= now,
+        "is_locked": game.kickoff <= comparison_now,
     }
 
 
@@ -136,4 +145,5 @@ def list_games_for_week(week_id: int):
         return jsonify({"error": "week_not_found"}), 404
     now = datetime.now(timezone.utc)
     games = Game.query.filter_by(week_id=week_id).order_by(Game.kickoff.asc()).all()
-    return jsonify([_serialize_game(g, now) for g in games])
+    records_by_game = records_before_games(games)
+    return jsonify([_serialize_game(g, now, records_by_game[g.id]) for g in games])

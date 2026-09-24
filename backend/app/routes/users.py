@@ -6,12 +6,13 @@ from sqlalchemy.orm import joinedload
 
 from app import db
 from app.models import Game, Pick, Season, User, Week
+from app.services.team_record_service import records_before_games
 from app.utils.auth_helpers import login_required
 
 users_bp = Blueprint("users", __name__, url_prefix="/api/users")
 
 
-def _serialize_pick(pick: Pick) -> dict:
+def _serialize_pick(pick: Pick, records: dict[str, str]) -> dict:
     game = pick.game
     return {
         "pick_id": pick.id,
@@ -20,6 +21,8 @@ def _serialize_pick(pick: Pick) -> dict:
         "home_abbr": game.home_abbr,
         "away_team": game.away_team,
         "home_team": game.home_team,
+        "away_record": records["away_record"],
+        "home_record": records["home_record"],
         "kickoff": game.kickoff.isoformat(),
         "spread_home": (
             float(game.spread_home) if game.spread_home is not None else None
@@ -46,7 +49,7 @@ def get_user_picks_for_week(user_id, week_id: int):
         return jsonify({"error": "week_not_found"}), 404
 
     query = (
-        Pick.query.options(joinedload(Pick.game))
+        Pick.query.options(joinedload(Pick.game).joinedload(Game.week))
         .join(Game, Pick.game_id == Game.id)
         .filter(Pick.user_id == target_user.id, Game.week_id == week_id)
     )
@@ -54,6 +57,7 @@ def get_user_picks_for_week(user_id, week_id: int):
         query = query.filter(Game.kickoff <= datetime.now(timezone.utc))
 
     picks = query.order_by(Game.kickoff.asc(), Pick.id.asc()).all()
+    records_by_game = records_before_games(pick.game for pick in picks)
     return jsonify(
         {
             "user": {
@@ -62,7 +66,9 @@ def get_user_picks_for_week(user_id, week_id: int):
                 "avatar_url": target_user.avatar_url,
             },
             "week_id": week.id,
-            "picks": [_serialize_pick(pick) for pick in picks],
+            "picks": [
+                _serialize_pick(pick, records_by_game[pick.game_id]) for pick in picks
+            ],
         }
     )
 
@@ -98,6 +104,7 @@ def get_my_picks():
         week_by_id[week.id] = week
         picks_by_week[week.id].append(pick)
 
+    records_by_game = records_before_games(pick.game for pick in picks)
     weeks_payload = []
     for week_id in sorted(
         week_by_id.keys(), key=lambda wid: week_by_id[wid].start_date, reverse=True
@@ -109,7 +116,10 @@ def get_my_picks():
                 "week_number": week.week_number,
                 "phase": week.phase,
                 "week_label": week.label,
-                "picks": [_serialize_pick(p) for p in picks_by_week[week_id]],
+                "picks": [
+                    _serialize_pick(p, records_by_game[p.game_id])
+                    for p in picks_by_week[week_id]
+                ],
             }
         )
 

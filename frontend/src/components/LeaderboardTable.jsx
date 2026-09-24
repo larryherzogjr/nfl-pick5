@@ -126,7 +126,14 @@ function PlayerPicks({ userId, weekId }) {
           >
             <div>
               <span className="font-medium text-slate-900">
-                {pick.away_abbr} @ {pick.home_abbr}
+                {pick.away_abbr}{" "}
+                <span className="text-xs font-normal tabular-nums text-slate-500">
+                  ({pick.away_record})
+                </span>{" "}
+                @ {pick.home_abbr}{" "}
+                <span className="text-xs font-normal tabular-nums text-slate-500">
+                  ({pick.home_record})
+                </span>
               </span>
               <span className="ml-2 text-slate-500">
                 {pick.home_abbr} {formatSpread(pick.spread_at_pick)}

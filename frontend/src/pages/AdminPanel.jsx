@@ -38,14 +38,24 @@ function Matchup({ game }) {
       <div className="mt-3 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <TeamLogo abbreviation={game.away_abbr} />
-          <span className="font-display text-2xl tracking-wide">
-            {game.away_abbr}
+          <span>
+            <span className="block font-display text-2xl tracking-wide">
+              {game.away_abbr}
+            </span>
+            <span className="block text-xs font-semibold tabular-nums text-slate-500">
+              {game.away_record}
+            </span>
           </span>
         </div>
         <span className="text-xs font-bold text-slate-400">@</span>
         <div className="flex items-center gap-2">
-          <span className="font-display text-2xl tracking-wide">
-            {game.home_abbr}
+          <span className="text-right">
+            <span className="block font-display text-2xl tracking-wide">
+              {game.home_abbr}
+            </span>
+            <span className="block text-xs font-semibold tabular-nums text-slate-500">
+              {game.home_record}
+            </span>
           </span>
           <TeamLogo abbreviation={game.home_abbr} />
         </div>

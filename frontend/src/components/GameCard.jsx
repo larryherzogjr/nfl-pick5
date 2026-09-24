@@ -93,6 +93,9 @@ export default function GameCard({
             )}
           </div>
           <div className="mt-1 text-xs text-slate-500">{game.away_team}</div>
+          <div className="mt-1 text-xs font-semibold tabular-nums text-slate-700">
+            {game.away_record}
+          </div>
         </div>
         <span className="text-xs font-medium text-slate-500">AT</span>
         <div className="flex min-w-0 flex-1 flex-col items-end text-right">
@@ -104,6 +107,9 @@ export default function GameCard({
             {game.home_abbr}
           </div>
           <div className="mt-1 text-xs text-slate-500">{game.home_team}</div>
+          <div className="mt-1 text-xs font-semibold tabular-nums text-slate-700">
+            {game.home_record}
+          </div>
         </div>
       </div>
       <div className="mt-auto pt-5">

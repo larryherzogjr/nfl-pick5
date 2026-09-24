@@ -478,8 +478,14 @@ function PickRow({ pick }) {
           title={`${pick.away_team} @ ${pick.home_team}`}
         >
           <span className="text-slate-500">{pick.away_abbr}</span>{" "}
+          <span className="text-xs font-normal tabular-nums text-slate-400">
+            ({pick.away_record})
+          </span>{" "}
           <span className="font-normal text-slate-400">@</span>{" "}
-          <span>{pick.home_abbr}</span>
+          <span>{pick.home_abbr}</span>{" "}
+          <span className="text-xs font-normal tabular-nums text-slate-400">
+            ({pick.home_record})
+          </span>
         </div>
         <div className="mt-0.5 truncate text-xs text-slate-500">
           {pick.away_team} @ {pick.home_team}
