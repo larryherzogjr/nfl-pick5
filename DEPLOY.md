@@ -443,6 +443,16 @@ srv-pick5: docker compose -f docker-compose.yml -f docker-compose.prod.yml logs 
 
 Scheduler log should show "Scheduler starting" plus the 6 registered jobs with cron triggers.
 
+For the live domain, once the backend is healthy, finish initial setup by syncing
+the versioned Nginx site as `lherzog`:
+
+```bash
+sudo python3 /srv/nfl-pick5/deploy/sync_nginx.py
+```
+
+This validates and reloads Nginx and checks the public database-backed health
+response. Subsequent deployments include this step automatically (Phase 6.2).
+
 ### 3.5 First odds refresh
 
 Hit the admin trigger to populate games for Week 1. But first you need an admin user — see Phase 4.
@@ -578,31 +588,60 @@ srv-lherzog: ls -lah /var/backups/pick5/
 
 ### 6.2 Code updates / redeploys
 
-When you ship a change:
+For the live `pick5.ospdy.com` deployment, use the versioned deployment script
+instead of individual build/restart commands. Run from your MacBook:
 
-```
-dev: # commit, push to GitHub
-srv-lherzog: sudo -iu pick5
-srv-pick5: cd /srv/nfl-pick5
-srv-pick5: git pull
-
-# Rebuild frontend dist (only if frontend code changed)
-srv-pick5: docker build --target dist --output type=local,dest=./frontend/dist \
-    --build-arg VITE_API_BASE_URL=https://pick5.yourdomain.com ./frontend
-srv-pick5: chmod -R go+rX /srv/nfl-pick5/frontend/dist
-
-# Rebuild backend/scheduler image (if backend code changed)
-srv-pick5: docker compose -f docker-compose.yml -f docker-compose.prod.yml build backend scheduler
-
-# Apply any new migrations (cheap to run unconditionally)
-srv-pick5: docker compose -f docker-compose.yml -f docker-compose.prod.yml \
-    run --rm backend flask db upgrade
-
-# Restart services
-srv-pick5: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+```bash
+ssh -t lherzog@pick5.ospdy.com 'sudo -iu pick5 bash -lc "cd /srv/nfl-pick5 && git pull --ff-only" && sudo bash /srv/nfl-pick5/deploy/production.sh'
 ```
 
-Backend and scheduler restart cleanly via Docker. Frontend changes are visible the moment the new `dist/` is in place — no service restart needed because Nginx serves static files directly off disk.
+Commit and push the desired revision first. The pull runs as `pick5`; the script
+runs as root so it can update host Nginx, while builds and application files stay
+owned by `pick5`. Sudo may prompt for the administrator's password. The script
+refuses tracked local changes and prints the revision being deployed.
+
+Every deployment:
+
+1. Validates production Compose configuration and builds the frontend into a
+   temporary directory outside the checkout.
+2. Builds backend/scheduler images, applies migrations, starts the services,
+   waits for container health, and checks Flask's local health endpoint.
+3. Publishes the frontend bundle with Nginx-readable permissions. Existing
+   hashed assets remain available to browsers with older pages open.
+4. Installs `deploy/nginx-pick5.conf` at `/etc/nginx/sites-available/pick5`,
+   runs `nginx -t`, reloads Nginx, and verifies that the public HTTPS `/healthz`
+   returns HTTP 200, JSON content type, and `{"status":"ok"}`. An HTML page
+   with status 200 fails verification.
+
+`deploy/nginx-pick5.conf` is the source of truth for the live site, including
+`/healthz`, avatar proxying, and the 6 MB request limit. Make future Nginx changes
+in this file and commit them; live-only edits are replaced on the next deploy.
+This script targets the existing Ubuntu deployment with certificates and the
+`sites-enabled/pick5` symlink already installed. For another domain or server
+layout, adapt the versioned configuration and scripts first.
+
+When the Nginx file changes, the sync helper saves the old file beside it as
+`pick5.backup-*` before installing the replacement atomically. Validation,
+reload, or public health failures restore the previous Nginx file, validate it,
+and reload it again; the deployment still exits with failure. Application
+images, migrations, and the frontend bundle are **not** rolled back by this
+Nginx recovery. If the file already matches, the helper still validates, reloads,
+and checks public health so running workers reflect the file on disk.
+
+To sync only Nginx after pulling a configuration change:
+
+```bash
+ssh -t lherzog@pick5.ospdy.com 'sudo python3 /srv/nfl-pick5/deploy/sync_nginx.py'
+```
+
+The scripts need Bash, Python 3, curl, Docker Compose v2.24+, Nginx, systemd,
+and `runuser`, which are available on the production Ubuntu host. Deployment
+checks run in CI and can also be run locally without root or network access:
+
+```bash
+bash -n deploy/production.sh
+python3 -m unittest discover -s deploy/tests -v
+```
 
 ### 6.3 Log inspection
 
@@ -643,7 +682,7 @@ srv-pick5: docker compose -f docker-compose.yml -f docker-compose.prod.yml ps
 
 Column `STATUS` should read `Up X minutes (healthy)` for `db` and `backend`. `scheduler` shows only `Up X minutes` (no healthcheck).
 
-For external monitoring (recommended — Docker's restart policy won't help if the whole box is down or if Nginx is misconfigured), point uptimerobot.com or healthchecks.io at `https://pick5.yourdomain.com/healthz`. A 200 response means Nginx + backend + DB are all reachable.
+For external monitoring (recommended — Docker's restart policy won't help if the whole box is down or if Nginx is misconfigured), point uptimerobot.com or healthchecks.io at `https://pick5.yourdomain.com/healthz`. Require HTTP 200 with JSON content type and `{"status":"ok"}`; an HTML 200 response can be the SPA fallback and does not prove backend health.
 
 If a container is crash-looping (restart policy masking a real config error), watch it:
 
