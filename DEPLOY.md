@@ -597,7 +597,9 @@ ssh -t lherzog@pick5.ospdy.com 'sudo -iu pick5 bash -lc "cd /srv/nfl-pick5 && gi
 
 Commit and push the desired revision first. The pull runs as `pick5`; the script
 runs as root so it can update host Nginx, while builds and application files stay
-owned by `pick5`. Sudo may prompt for the administrator's password. The script
+owned by `pick5`. Application steps run from `deploy/build_app.sh` with stdin
+disconnected; migration containers cannot consume later deployment commands.
+Sudo may prompt for the administrator's password. The script
 refuses tracked local changes and prints the revision being deployed.
 
 Every deployment:
@@ -639,7 +641,7 @@ and `runuser`, which are available on the production Ubuntu host. Deployment
 checks run in CI and can also be run locally without root or network access:
 
 ```bash
-bash -n deploy/production.sh
+bash -n deploy/production.sh && bash -n deploy/build_app.sh
 python3 -m unittest discover -s deploy/tests -v
 ```
 
