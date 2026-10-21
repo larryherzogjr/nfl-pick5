@@ -61,9 +61,15 @@ export default function GameCard({
   ];
   if (
     (hasLine && Number.isInteger(spread)) ||
-    (locked && currentPick?.picked_side === "push")
+    currentPick?.picked_side === "push"
   )
-    buttons.push({ side: "push", label: "Push · 2 pts" });
+    buttons.push({
+      side: "push",
+      label:
+        currentPick?.picked_side === "push"
+          ? `${formatPickLine(currentPick, game)} · 2 pts`
+          : "Push · 2 pts",
+    });
   const hasGrade = currentPick?.points_awarded != null;
   const points = currentPick?.points_awarded;
   const hasScores =
@@ -122,7 +128,15 @@ export default function GameCard({
             <button
               key={button.side}
               type="button"
-              disabled={locked || !hasLine || isSaving}
+              disabled={
+                locked ||
+                isSaving ||
+                (!hasLine &&
+                  !(
+                    button.side === "push" &&
+                    currentPick?.picked_side === "push"
+                  ))
+              }
               aria-pressed={selectedSide === button.side}
               onClick={() => {
                 if (!game.is_locked && Date.now() < kickoffMs)

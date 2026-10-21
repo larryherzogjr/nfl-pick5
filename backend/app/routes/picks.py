@@ -113,6 +113,8 @@ def submit_picks_for_week(week_id: int):
     # current state. Serialize same-user submissions before reading that state
     # so two Gunicorn workers cannot independently pass the limit check.
     _lock_user_for_pick_submission(g.current_user.id)
+    existing_picks = _user_picks_for_week(g.current_user.id, week_id)
+    existing_by_game = {p.game_id: p for p in existing_picks}
     now = datetime.now(timezone.utc)
     locked_skipped = 0
     to_apply: list[tuple[Game, str]] = []
@@ -129,11 +131,20 @@ def submit_picks_for_week(week_id: int):
             if game is None or game.week_id != week_id:
                 errors.append({"game_id": gid, "error": "game_not_in_week"})
                 continue
-            if game.kickoff <= now:
+            kickoff = game.kickoff
+            if kickoff.tzinfo is None:
+                kickoff = kickoff.replace(tzinfo=timezone.utc)
+            if kickoff <= now:
                 locked_skipped += 1
                 continue
             if side not in VALID_SIDES:
                 errors.append({"game_id": gid, "error": "invalid_picked_side"})
+                continue
+            existing = existing_by_game.get(gid)
+            if existing is not None and existing.picked_side == side:
+                # Saving other games must not reprice an unchanged pick, even
+                # when a saved push is no longer offered by the current line.
+                to_apply.append((game, side))
                 continue
             if game.spread_home is None:
                 errors.append({"game_id": gid, "error": "spread_unavailable"})
@@ -150,8 +161,6 @@ def submit_picks_for_week(week_id: int):
     if errors:
         return jsonify({"errors": errors}), 400
 
-    existing_picks = _user_picks_for_week(g.current_user.id, week_id)
-    existing_by_game = {p.game_id: p for p in existing_picks}
     to_apply_game_ids = {game.id for game, _ in to_apply}
     final_game_ids, picks_to_delete = _replacement_plan(
         existing_picks, to_apply_game_ids, now
@@ -179,7 +188,7 @@ def submit_picks_for_week(week_id: int):
             )
             db.session.add(pick)
             existing_by_game[game.id] = pick
-        else:
+        elif pick.picked_side != side:
             pick.picked_side = side
             pick.spread_at_pick = game.spread_home
             pick.updated_at = now

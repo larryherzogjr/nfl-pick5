@@ -189,6 +189,102 @@ class PickEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json(), {"status": "ok"})
 
+    def test_unchanged_picks_keep_their_spreads_when_saving_other_games(self):
+        self._login(self.target)
+        saved = Pick.query.filter_by(
+            user_id=self.target.id, game_id=self.future_game.id
+        ).one()
+        saved.picked_side = "push"
+        saved.spread_at_pick = Decimal("-3.0")
+        saved.updated_at = self.now - timedelta(days=1)
+        db.session.commit()
+        original = self.client.get(f"/api/weeks/{self.week.id}/picks").get_json()
+        original = next(p for p in original if p["game_id"] == self.future_game.id)
+
+        other = self._game("other", self.now + timedelta(hours=3), "SEA", "DAL")
+        db.session.add(other)
+        db.session.commit()
+        for current_line in (Decimal("-2.5"), Decimal("4.5"), Decimal("-4"), None):
+            with self.subTest(current_line=current_line):
+                self.future_game.spread_home = current_line
+                db.session.commit()
+                response = self.client.post(
+                    f"/api/weeks/{self.week.id}/picks",
+                    json={
+                        "picks": [
+                            {"game_id": self.future_game.id, "picked_side": "push"},
+                            {"game_id": other.id, "picked_side": "home"},
+                        ]
+                    },
+                )
+                self.assertEqual(response.status_code, 200, response.get_json())
+                picks = {p["game_id"]: p for p in response.get_json()["picks"]}
+                self.assertEqual(picks[self.future_game.id], original)
+                self.assertEqual(picks[other.id]["spread_at_pick"], -3.0)
+                self.assertIn(self.locked_game.id, picks)
+
+    def test_unchanged_team_pick_keeps_snapshot_but_changed_side_uses_current_line(
+        self,
+    ):
+        self._login(self.target)
+        self.future_game.spread_home = Decimal("-4.5")
+        db.session.commit()
+        for side, expected_line in (("away", 2.5), ("home", -4.5)):
+            response = self.client.post(
+                f"/api/weeks/{self.week.id}/picks",
+                json={"picks": [{"game_id": self.future_game.id, "picked_side": side}]},
+            )
+            self.assertEqual(response.status_code, 200, response.get_json())
+            saved = next(
+                p
+                for p in response.get_json()["picks"]
+                if p["game_id"] == self.future_game.id
+            )
+            self.assertEqual(saved["picked_side"], side)
+            self.assertEqual(saved["spread_at_pick"], expected_line)
+
+    def test_new_push_at_half_point_line_is_rejected(self):
+        self._login(self.target)
+        self.future_game.spread_home = Decimal("-2.5")
+        db.session.commit()
+        response = self.client.post(
+            f"/api/weeks/{self.week.id}/picks",
+            json={"picks": [{"game_id": self.future_game.id, "picked_side": "push"}]},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.get_json()["errors"],
+            [
+                {
+                    "game_id": self.future_game.id,
+                    "error": "push_requires_whole_spread",
+                }
+            ],
+        )
+
+    def test_removed_push_cannot_be_recreated_at_half_point_line(self):
+        self._login(self.target)
+        saved = Pick.query.filter_by(
+            user_id=self.target.id, game_id=self.future_game.id
+        ).one()
+        saved.picked_side = "push"
+        saved.spread_at_pick = Decimal("-3.0")
+        self.future_game.spread_home = Decimal("-2.5")
+        db.session.commit()
+        response = self.client.post(
+            f"/api/weeks/{self.week.id}/picks", json={"picks": []}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [p["game_id"] for p in response.get_json()["picks"]],
+            [self.locked_game.id],
+        )
+        response = self.client.post(
+            f"/api/weeks/{self.week.id}/picks",
+            json={"picks": [{"game_id": self.future_game.id, "picked_side": "push"}]},
+        )
+        self.assertEqual(response.status_code, 400)
+
     def test_duplicate_oauth_email_is_detected_without_auto_linking(self):
         self.assertEqual(
             _email_belongs_to_another_user(self.target.email, None), self.target

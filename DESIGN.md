@@ -149,12 +149,14 @@ def submit_pick(user, game, picked_side):
         raise PickLockError(f"{game.away_abbr}@{game.home_abbr} has already kicked off.")
     if picked_side not in ('home', 'away', 'push'):
         raise ValidationError("picked_side must be 'home', 'away', or 'push'.")
+    pick = Pick.query.filter_by(user_id=user.id, game_id=game.id).first()
+    if pick and pick.picked_side == picked_side:
+        return  # Preserve the existing snapshot for an unchanged selection.
     if picked_side == 'push' and (float(game.spread_home) % 1) != 0:
         raise ValidationError("Push picks are only allowed on whole-number spreads.")
 
-    pick = Pick.query.filter_by(user_id=user.id, game_id=game.id).first()
     if pick:
-        # Updating an existing pick re-snapshots the current spread.
+        # Changing the selected side re-snapshots the current spread.
         pick.picked_side = picked_side
         pick.spread_at_pick = game.spread_home
         pick.updated_at = datetime.now(timezone.utc)
@@ -178,11 +180,12 @@ def submit_pick(user, game, picked_side):
 - Display a countdown or "LOCKED" badge per game card once kickoff passes.
 - Poll the server or use the game's `kickoff` timestamp client-side to disable the pick toggle.
 - The server is the **authority** — always validate server-side regardless of client state.
+- Keep saved Push picks visible with their original line even if the current line changes to a half-point or becomes unavailable. Before kickoff, users can deselect them or change sides.
 
 ### Spread Snapshotting Rules
 
 - The spread used for grading is the one stored on each individual pick (`picks.spread_at_pick`), captured at the moment of submission.
-- If a user changes their pick before kickoff, the new pick **re-snapshots** the current spread. No exceptions.
+- If a user changes the selected side before kickoff, the new pick **re-snapshots** the current spread. Saving the same side preserves its original spread and timestamps, including saved Push picks when the current line is no longer a whole number. Removing a pick in a saved submission and later adding it again creates a new snapshot.
 - Once a game has kicked off, the pick is locked and the snapshot is final.
 - `games.spread_home` continues to update from the Odds API up to kickoff, but only affects *future* new/changed picks. Admin overrides on `games.spread_home` do **not** retroactively re-grade already-submitted picks. The admin panel should make this explicit.
 
@@ -277,13 +280,13 @@ regular and postseason results share the official-season record.
 }
 ```
 
-Server captures `spread_at_pick` automatically from `games.spread_home` at the moment of submission. The endpoint is idempotent: it replaces the user's picks for unlocked games. Picks for locked games are silently preserved. Each pick included in the submission re-snapshots the current spread.
+Server captures `spread_at_pick` automatically from `games.spread_home` at the moment of submission. The endpoint is idempotent: it replaces the user's picks for unlocked games. Picks for locked games are silently preserved. Unchanged selections retain their original spread and timestamps. New picks and changes to the selected side snapshot the current spread.
 
 Server validates:
 - The pick's game is in the requested week.
 - Kickoff has not passed.
 - `picked_side` is one of `home | away | push`.
-- If `picked_side = 'push'`, the current `spread_home` is a whole number.
+- For new or changed Push selections, the current `spread_home` is a whole number. An unchanged saved Push keeps its original whole-number snapshot.
 - The user's total picks for the week (after this submission) do not exceed 5.
 
 ### 6.4 Leaderboard
@@ -338,7 +341,7 @@ def visible_picks(viewer, target_user, week):
 | POST   | /api/admin/scores/refresh          | Refresh completed games from the API |
 | GET    | /api/admin/users                   | List registered users                |
 
-The spread override endpoint must display a warning that the change affects only new and re-submitted picks — already-locked picks retain their snapshot.
+The spread override endpoint must display a warning that the change affects only new picks and changed selections; unchanged picks retain their snapshot.
 
 ---
 
