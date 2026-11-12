@@ -69,7 +69,7 @@ export default function App() {
                 }
               />
             </Routes>
-            <footer className="row-start-2 flex justify-end p-4 sm:px-7">
+            <footer className="row-start-2 flex justify-center p-4 sm:px-7">
               <a
                 href="https://herzogenclave.com"
                 target="_blank"
