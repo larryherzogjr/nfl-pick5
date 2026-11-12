@@ -84,7 +84,7 @@ export default function Rules() {
   const { isAuthenticated } = useAuth();
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="bg-slate-50">
       {isAuthenticated ? <TopNav /> : <PublicHeader />}
       <PageHeader
         eyebrow="NFL Pick 5 · The playbook"

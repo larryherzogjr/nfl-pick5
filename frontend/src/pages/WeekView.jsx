@@ -246,7 +246,7 @@ export default function WeekView() {
   );
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-40">
+    <div className="bg-slate-50">
       <TopNav />
       <PageHeader
         eyebrow={`NFL Pick 5 · ${week?.label ?? "Your picks"}${season?.label ? ` · ${season.label}` : ""}`}

@@ -703,7 +703,7 @@ export default function Profile() {
   });
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="bg-slate-50">
       <TopNav />
       <PageHeader
         eyebrow="NFL Pick 5 · Profile"

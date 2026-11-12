@@ -22,7 +22,7 @@ export default function Login() {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-300 border-t-slate-700" />
       </div>
     );
@@ -33,7 +33,7 @@ export default function Login() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-cream">
+    <div className="flex flex-col bg-cream">
       <nav className="bg-field-dark px-6 py-5">
         <div className="mx-auto flex max-w-5xl items-center justify-between">
           <Brand />
